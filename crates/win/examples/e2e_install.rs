@@ -36,6 +36,7 @@ fn main() {
     for c in &components.components {
         let alias = match c.id.as_str() {
             "optiscaler" => "optiscaler.7z",
+            "optiscaler-dlssnr" => "optiscaler-dlssnr.zip",
             "reshade" => "reshade_setup.exe",
             _ => "feeder.zip",
         };
@@ -64,13 +65,19 @@ fn main() {
     };
 
     for (route, apis, ships) in [
+        (Route::ReShadeRenoDx, vec![GraphicsApi::Dx12], true),
+        (Route::ReShadeFeeder, vec![GraphicsApi::Dx11], false),
+        (Route::OptiScalerDlssNr, vec![GraphicsApi::Dx12], true),
         (Route::OptiScaler, vec![GraphicsApi::Dx12], true),
-        (Route::ReShadeRenoDx, vec![GraphicsApi::Dx11], false),
     ] {
         let game_dir = root.join(format!("game-{route:?}"));
         std::fs::create_dir_all(&game_dir).unwrap();
         std::fs::write(game_dir.join("G.exe"), b"pretend game").unwrap();
-        std::fs::write(game_dir.join("OptiScaler.ini"), b"; user's old ini").unwrap();
+        std::fs::write(
+            game_dir.join("nvngx_dlssnr.dll"),
+            b"an older model already there",
+        )
+        .unwrap();
         let before = snapshot(&game_dir);
 
         let game = game(&game_dir, apis, route, ships);
@@ -147,6 +154,7 @@ fn game(dir: &Path, apis: Vec<GraphicsApi>, route: Route, ships_dlss: bool) -> G
         },
         cover: None,
         hidden: false,
+        mode: None,
     }
 }
 

@@ -83,7 +83,7 @@ pub fn analyse_game(game: &Game, paths: &AppPaths, components: &ComponentManifes
     };
     let analysed = match analysis::analyse_cached(&discovered, game.analysis.as_ref()) {
         Ok(a) => Game {
-            status: routing::decide(&a),
+            status: routing::decide(&a, game.mode),
             analysis: Some(a),
             ..game.clone()
         },
@@ -201,7 +201,7 @@ mod tests {
         assert!(matches!(
             &g.status,
             GameStatus::Ready {
-                route: Route::ReShadeRenoDx,
+                route: Route::ReShadeFeeder,
                 ..
             }
         ));
@@ -237,6 +237,7 @@ mod tests {
             status: GameStatus::Pending,
             cover: None,
             hidden: false,
+            mode: None,
         };
         let plain = analyse_game(&game, &paths, &components);
         assert!(matches!(plain.status, GameStatus::Unsupported { .. }));

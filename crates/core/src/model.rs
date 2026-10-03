@@ -88,15 +88,39 @@ pub enum Engine {
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum Route {
-    /// Game ships DLSS: OptiScaler as a proxy DLL plus the model.
-    #[serde(rename = "optiscaler")]
-    OptiScaler,
-    /// No DLSS, DX11/DX12: ReShade + RenoDX DLSS 5 add-on + Feeder + model.
+    /// Game ships DLSS: ReShade + RenoDX DLSS 5 add-on + model. The add-on
+    /// hooks the game's own NGX calls, so DLSS must be on in the game.
     #[serde(rename = "reshade_renodx")]
     ReShadeRenoDx,
-    /// No DLSS, Vulkan: ReShade (vulkan) + Feeder + model.
+    /// No DLSS, DX11/DX12: ReShade + Feeder + RenoDX add-on + DLSS runtime + model.
+    #[serde(rename = "reshade_feeder")]
+    ReShadeFeeder,
+    /// Game ships DLSS, user chose [`InstallMode::OptiScalerDlss5`]: the
+    /// OptiScaler DLSS-NR fork as the proxy, model beside it, NR switched on.
+    #[serde(rename = "optiscaler_dlssnr")]
+    OptiScalerDlssNr,
+    /// Game ships DLSS, user chose [`InstallMode::OptiScalerOnly`]: upstream
+    /// OptiScaler, no model. (Also what shim 0.1.0 installed by default.)
+    #[serde(rename = "optiscaler")]
+    OptiScaler,
+    /// No DLSS, Vulkan: not routed yet (Phase 3 note in PLAN §12.0c).
     #[serde(rename = "reshade_vulkan")]
     ReShadeVulkan,
+}
+
+/// The user's per-game choice for games that ship DLSS. Games without DLSS
+/// always take the Feeder route; the choice is ignored there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, Default)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum InstallMode {
+    /// ReShade + RenoDX DLSS 5 add-on over the game's own DLSS output.
+    #[default]
+    Dlss5,
+    /// OptiScaler's upscaler plus the DLSS 5 model in one DLL (the DLSS-NR fork).
+    OptiScalerDlss5,
+    /// Upstream OptiScaler only: a different upscaler, no neural pass.
+    OptiScalerOnly,
 }
 
 /// What the Library card says under the title.
@@ -174,4 +198,7 @@ pub struct Game {
     pub status: GameStatus,
     pub cover: Option<PathBuf>,
     pub hidden: bool,
+    /// Per-game route choice; `None` means the default ([`InstallMode::Dlss5`]).
+    #[serde(default)]
+    pub mode: Option<InstallMode>,
 }

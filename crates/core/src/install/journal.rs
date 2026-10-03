@@ -380,11 +380,11 @@ mod tests {
         let game_dir = tmp.path().join("game");
         std::fs::create_dir_all(&game_dir).unwrap();
         std::fs::write(game_dir.join("G.exe"), b"game").unwrap();
-        // A pre-existing OptiScaler.ini / model stand in for files we overwrite.
-        std::fs::write(game_dir.join("OptiScaler.ini"), b"old ini").unwrap();
+        // A pre-existing nvngx_dlssnr.dll / model stand in for files we overwrite.
+        std::fs::write(game_dir.join("nvngx_dlssnr.dll"), b"old model").unwrap();
         let settings = settings_with_user_files(tmp.path());
         let (apis, ships) = match route {
-            Route::OptiScaler => (vec![GraphicsApi::Dx12], true),
+            Route::ReShadeRenoDx => (vec![GraphicsApi::Dx12], true),
             _ => (vec![GraphicsApi::Dx11], false),
         };
         let game = game(&game_dir, &apis, route, ships);
@@ -421,7 +421,7 @@ mod tests {
 
     #[test]
     fn install_then_uninstall_is_byte_identical() {
-        for route in [Route::OptiScaler, Route::ReShadeRenoDx] {
+        for route in [Route::ReShadeRenoDx, Route::ReShadeFeeder] {
             let f = fixture(route);
             let before = snapshot(&f.game_dir);
             let mut steps = Vec::new();
@@ -434,11 +434,11 @@ mod tests {
             assert!(f.game_dir.join(MODEL_DLL).is_file());
             assert!(f.game_dir.join("shim.json").is_file());
             assert!(InstallManifest::load(&f.paths, "g1").unwrap().is_some());
-            if route == Route::OptiScaler {
+            if route == Route::ReShadeRenoDx {
                 let ini = manifest
                     .files
                     .iter()
-                    .find(|r| r.target.ends_with("OptiScaler.ini"))
+                    .find(|r| r.target.ends_with("nvngx_dlssnr.dll"))
                     .unwrap();
                 assert!(
                     ini.backup.as_ref().unwrap().is_file(),
@@ -464,7 +464,7 @@ mod tests {
 
     #[test]
     fn failure_at_every_op_rolls_back_completely() {
-        for route in [Route::OptiScaler, Route::ReShadeRenoDx] {
+        for route in [Route::ReShadeRenoDx, Route::ReShadeFeeder] {
             let total = fixture(route).plan.ops.len();
             for fail_at in 0..total {
                 let f = fixture(route);
@@ -494,23 +494,23 @@ mod tests {
 
     #[test]
     fn read_only_game_files_are_replaced_and_restored() {
-        let f = fixture(Route::OptiScaler);
-        set_readonly(&f.game_dir.join("OptiScaler.ini"), true);
+        let f = fixture(Route::ReShadeRenoDx);
+        set_readonly(&f.game_dir.join("nvngx_dlssnr.dll"), true);
         let before = snapshot(&f.game_dir);
         let manifest = Journal::run(&f.paths, "g1", &f.plan, false, &mut |_| {}).unwrap();
         assert_ne!(
-            std::fs::read(f.game_dir.join("OptiScaler.ini")).unwrap(),
-            b"old ini"
+            std::fs::read(f.game_dir.join("nvngx_dlssnr.dll")).unwrap(),
+            b"old model"
         );
         // A file someone marked read-only after our install must still go.
-        set_readonly(&f.game_dir.join("libxess.dll"), true);
+        set_readonly(&f.game_dir.join("dxgi.dll"), true);
         uninstall(&f.paths, &manifest).unwrap();
         assert_eq!(snapshot(&f.game_dir), before);
     }
 
     #[test]
     fn recover_finishes_an_interrupted_install_even_mid_write() {
-        let f = fixture(Route::OptiScaler);
+        let f = fixture(Route::ReShadeRenoDx);
         let before = snapshot(&f.game_dir);
         let mut journal = Journal {
             paths: &f.paths,
@@ -585,7 +585,7 @@ mod tests {
 
     #[test]
     fn unwritable_folder_is_reported_before_any_change() {
-        let f = fixture(Route::OptiScaler);
+        let f = fixture(Route::ReShadeRenoDx);
         let mut plan = f.plan.clone();
         plan.exe = PathBuf::from("Z:/nope/G.exe");
         let err = Journal::run(&f.paths, "g1", &plan, false, &mut |_| {}).unwrap_err();

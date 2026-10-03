@@ -136,7 +136,10 @@ mod tests {
     fn embedded_manifest_is_valid_and_has_the_v1_components() {
         let m = ComponentManifest::embedded();
         let ids: Vec<&str> = m.components.iter().map(|c| c.id.as_str()).collect();
-        assert_eq!(ids, vec!["optiscaler", "reshade", "dlss5-feeder"]);
+        assert_eq!(
+            ids,
+            vec!["reshade", "dlss5-feeder", "optiscaler-dlssnr", "optiscaler"]
+        );
         for c in &m.components {
             assert!(c.asset.starts_with("https://"), "{}", c.id);
             assert!(!c.summary.is_empty(), "{}", c.id);

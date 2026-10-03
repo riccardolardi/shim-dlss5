@@ -92,6 +92,7 @@ mod tests {
             status: GameStatus::Pending,
             cover: None,
             hidden: false,
+            mode: None,
         }
     }
 

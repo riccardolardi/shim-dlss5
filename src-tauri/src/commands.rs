@@ -185,7 +185,7 @@ pub async fn install_game(
             // The override routes the game as if it had no anti-cheat.
             let mut a = game.analysis.clone().expect("anti_cheat implies analysis");
             a.anti_cheat = None;
-            game.status = shim_core::routing::decide(&a);
+            game.status = shim_core::routing::decide(&a, game.mode);
             game.analysis = Some(a);
         }
         let plan = install::plan(&Inputs {
@@ -260,6 +260,35 @@ pub async fn remove_game(app: AppHandle, game_id: String) -> CmdResult<Game> {
         update_game(&state, fresh)
     })
     .await
+}
+
+/// Choose the route for a game that ships DLSS. Refused while installed:
+/// remove first, then the new route applies to the next install.
+#[tauri::command]
+pub fn set_game_mode(
+    state: State<'_, AppState>,
+    game_id: String,
+    mode: Option<shim_core::model::InstallMode>,
+) -> CmdResult<Game> {
+    let game = find_game(&state, &game_id)?;
+    if matches!(
+        game.status,
+        GameStatus::Installed { .. } | GameStatus::UpdateAvailable { .. }
+    ) {
+        return Err(Error::AlreadyInstalled.into());
+    }
+    let status = match &game.analysis {
+        Some(a) => shim_core::routing::decide(a, mode),
+        None => game.status.clone(),
+    };
+    update_game(
+        &state,
+        Game {
+            mode,
+            status,
+            ..game
+        },
+    )
 }
 
 /// Re-analyse one game from scratch (ignores the size+mtime cache).

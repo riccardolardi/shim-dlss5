@@ -99,6 +99,7 @@ impl Library {
             let known = self.games.iter().find(|g| g.id == id);
             Game {
                 hidden: hidden_games.contains(&id),
+                mode: known.and_then(|g| g.mode),
                 id,
                 launcher: d.launcher,
                 title: d.title.clone(),
@@ -220,6 +221,7 @@ mod tests {
             status,
             cover: Some(PathBuf::from("cover.jpg")),
             hidden: false,
+            mode: None,
         }
     }
 

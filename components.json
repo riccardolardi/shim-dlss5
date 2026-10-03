@@ -3,19 +3,6 @@
   "updated": "2026-10-03",
   "components": [
     {
-      "id": "optiscaler",
-      "name": "OptiScaler",
-      "license": "GPL-3.0",
-      "publisher": "https://github.com/optiscaler/OptiScaler",
-      "version": "0.9.4",
-      "asset": "https://github.com/optiscaler/OptiScaler/releases/download/v0.9.4/Optiscaler_0.9.4-final.20260718._MM.7z",
-      "sha256": "575cb4df866116093df75af607e37fd70e10f5163e0f23fd5c804142e80ef0ad",
-      "size": 55016448,
-      "archive": "seven_z",
-      "extract": { "strip": ["!! README", "setup_linux.sh", "setup_windows.bat"], "only": [] },
-      "summary": "Loads as a proxy DLL in games that ship DLSS and hands the DLSS slot to your DLSS 5 model."
-    },
-    {
       "id": "reshade",
       "name": "ReShade (add-on build)",
       "license": "BSD-3-Clause",
@@ -26,7 +13,7 @@
       "size": 4318424,
       "archive": "zip",
       "extract": { "strip": [], "only": ["ReShade64.dll", "ReShade64.json"] },
-      "summary": "Post-processing host that loads add-ons. Only the 64-bit DLL is taken out of the setup file; the installer itself is never run."
+      "summary": "Post-processing host that loads the DLSS 5 add-on. Only the 64-bit DLL is taken out of the setup file; the installer itself is never run."
     },
     {
       "id": "dlss5-feeder",
@@ -43,6 +30,32 @@
         "only": []
       },
       "summary": "ReShade add-on that feeds depth and motion vectors to the DLSS 5 add-on in games without DLSS."
+    },
+    {
+      "id": "optiscaler-dlssnr",
+      "name": "OptiScaler DLSS-NR fork",
+      "license": "GPL-3.0",
+      "publisher": "https://github.com/Dagherbou/OptiScaler_DLSSNR",
+      "version": "0.2.0",
+      "asset": "https://github.com/Dagherbou/OptiScaler_DLSSNR/releases/download/v0.2.0-dlssnr/OptiScaler-DLSSNR-v0.2.0.zip",
+      "sha256": "8eece7a4d7de6de5917f0c99ac60540b2d77022e7699bba717b0a6d9e1829bce",
+      "size": 130486024,
+      "archive": "zip",
+      "extract": { "strip": ["Licenses/", "!! EXTRACT", "setup_linux.sh", "setup_windows.bat"], "only": [] },
+      "summary": "OptiScaler with the DLSS 5 neural pass built in: upscales, then runs your model on its own output. Optional mode for games that ship DLSS (RTX 50)."
+    },
+    {
+      "id": "optiscaler",
+      "name": "OptiScaler",
+      "license": "GPL-3.0",
+      "publisher": "https://github.com/optiscaler/OptiScaler",
+      "version": "0.9.4",
+      "asset": "https://github.com/optiscaler/OptiScaler/releases/download/v0.9.4/Optiscaler_0.9.4-final.20260718._MM.7z",
+      "sha256": "575cb4df866116093df75af607e37fd70e10f5163e0f23fd5c804142e80ef0ad",
+      "size": 55016448,
+      "archive": "seven_z",
+      "extract": { "strip": ["!! README", "setup_linux.sh", "setup_windows.bat"], "only": [] },
+      "summary": "Upstream OptiScaler: swaps the game's DLSS for another upscaler. No DLSS 5 pass; optional mode for games that ship DLSS."
     }
   ]
 }

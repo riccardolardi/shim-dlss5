@@ -3,7 +3,7 @@ import { matchesFilter, statusLine } from "./status";
 describe("statusLine", () => {
   it("names the route when installed", () => {
     const out = statusLine({ kind: "installed", route: "optiscaler" });
-    expect(out.text).toBe("Installed · OptiScaler");
+    expect(out.text).toBe("Installed · OptiScaler only");
     expect(out.tone).toBe("success");
   });
 

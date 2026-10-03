@@ -32,6 +32,7 @@ pub fn run() {
             commands::inspect_file,
             commands::install_game,
             commands::remove_game,
+            commands::set_game_mode,
             commands::rescan_game,
             commands::open_folder,
             commands::fetch_covers,

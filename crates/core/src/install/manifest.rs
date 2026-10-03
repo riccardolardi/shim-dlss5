@@ -110,13 +110,13 @@ mod tests {
             schema: INSTALL_SCHEMA,
             game_id: "g1".into(),
             exe: dir.join("Game.exe"),
-            route: Route::OptiScaler,
+            route: Route::ReShadeRenoDx,
             installed_at: 1,
             components: vec![ComponentPin {
-                id: "optiscaler".into(),
-                version: "0.9.4".into(),
+                id: "reshade".into(),
+                version: "6.8.0".into(),
                 sha256: ComponentManifest::embedded()
-                    .get("optiscaler")
+                    .get("reshade")
                     .unwrap()
                     .sha256
                     .clone(),

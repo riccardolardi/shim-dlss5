@@ -1,6 +1,15 @@
 //! Turn a game, its route and the component store into the exact list of file
 //! operations an install performs. The plan is a value: nothing here touches
 //! the game folder, and `describe()` is what the user reads before clicking.
+//!
+//! ReShade routes: ReShade (add-on build, as `dxgi.dll`) hosting the user's
+//! RenoDX DLSS 5 add-on next to the user's model; the no-DLSS route adds
+//! DLSS5-Feeder, its effect, a preset that switches it on, and the user's
+//! DLSS runtime. The `ReShade.ini` mirrors a known-working install (§12.0d).
+//!
+//! OptiScaler routes: the whole payload beside the exe, `OptiScaler.dll`
+//! renamed to the first free proxy slot; the DLSS-NR fork also gets the model
+//! and an ini with the neural pass switched on.
 
 use std::path::{Path, PathBuf};
 
@@ -13,6 +22,12 @@ use crate::{
     Error, Result,
 };
 
+pub const RESHADE_PROXY: &str = "dxgi.dll";
+pub const RESHADE_INI: &str = "ReShade.ini";
+pub const RESHADE_PRESET: &str = "ReShadePreset.ini";
+pub const RENODX_ADDON: &str = "renodx-dlss5.addon64";
+pub const DLSS_RUNTIME_DLL: &str = "nvngx_dlss.dll";
+
 /// Proxy names OptiScaler can take, in the order we try them (PLAN §5.5).
 pub const OPTISCALER_SLOTS_DX: &[&str] = &[
     "dxgi.dll",
@@ -24,15 +39,12 @@ pub const OPTISCALER_SLOTS_DX: &[&str] = &[
     "winhttp.dll",
 ];
 pub const OPTISCALER_SLOTS_VK: &[&str] = &["winmm.dll", "version.dll", "dbghelp.dll"];
-
 /// Store folders of OptiScaler that never go beside a game exe.
-const OPTISCALER_SKIP: &[&str] = &["Licenses/", "D3D12_Optiscaler/"];
-
-pub const RESHADE_PROXY: &str = "dxgi.dll";
-pub const RESHADE_INI: &str = "ReShade.ini";
-pub const RESHADE_PRESET: &str = "ReShadePreset.ini";
-pub const RENODX_ADDON: &str = "renodx-dlss5.addon64";
-pub const DLSS_RUNTIME_DLL: &str = "nvngx_dlss.dll";
+const OPTISCALER_SKIP: &[&str] = &[
+    "Licenses/",
+    "D3D12_Optiscaler/",
+    "OptiScaler/D3D12_OptiScaler/",
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileOp {
@@ -124,11 +136,6 @@ pub fn plan(inputs: &Inputs<'_>) -> Result<Plan> {
         .parent()
         .unwrap_or(&game.install_dir)
         .to_path_buf();
-    let model = user_file(
-        inputs.settings.model_path.as_deref(),
-        "DLSS 5 model (nvngx_dlssnr.dll)",
-    )?;
-
     let mut plan = Plan {
         route,
         exe: analysis.exe.clone(),
@@ -139,19 +146,39 @@ pub fn plan(inputs: &Inputs<'_>) -> Result<Plan> {
     };
 
     match route {
-        Route::OptiScaler => plan_optiscaler(inputs, &exe_dir, &analysis.apis, &mut plan)?,
-        Route::ReShadeRenoDx => plan_reshade_renodx(inputs, &exe_dir, &mut plan)?,
-        Route::ReShadeVulkan => {
-            return Err(Error::unsupported("Vulkan games without DLSS"));
+        Route::ReShadeRenoDx => {
+            plan_reshade(inputs, &exe_dir, false, &mut plan)?;
+            push_renodx(inputs, &exe_dir, &mut plan)?;
+            push_model(inputs, &exe_dir, &mut plan)?;
         }
+        Route::ReShadeFeeder => {
+            plan_reshade(inputs, &exe_dir, true, &mut plan)?;
+            push_renodx(inputs, &exe_dir, &mut plan)?;
+            push_model(inputs, &exe_dir, &mut plan)?;
+        }
+        Route::OptiScalerDlssNr => {
+            plan_optiscaler(
+                inputs,
+                "optiscaler-dlssnr",
+                &exe_dir,
+                &analysis.apis,
+                true,
+                &mut plan,
+            )?;
+            push_model(inputs, &exe_dir, &mut plan)?;
+        }
+        Route::OptiScaler => {
+            plan_optiscaler(
+                inputs,
+                "optiscaler",
+                &exe_dir,
+                &analysis.apis,
+                false,
+                &mut plan,
+            )?;
+        }
+        Route::ReShadeVulkan => return Err(Error::unsupported("Vulkan games")),
     }
-
-    plan.model_sha256 = Some(crate::components::fetch::sha256_file(&model)?);
-    plan.ops.push(FileOp::Copy {
-        src: model,
-        dst: exe_dir.join(MODEL_DLL),
-        note: "your DLSS 5 model".into(),
-    });
     Ok(plan)
 }
 
@@ -168,58 +195,51 @@ fn route_of(status: &GameStatus) -> Result<Route> {
     }
 }
 
-fn plan_optiscaler(
-    inputs: &Inputs<'_>,
-    exe_dir: &Path,
-    apis: &[GraphicsApi],
-    plan: &mut Plan,
-) -> Result<()> {
-    let c = component(inputs, "optiscaler")?;
-    let slots = if apis.contains(&GraphicsApi::Dx12) || apis.contains(&GraphicsApi::Dx11) {
-        OPTISCALER_SLOTS_DX
-    } else {
-        OPTISCALER_SLOTS_VK
-    };
-    let slot = free_slot(exe_dir, slots)?;
-    for rel in inputs.store.files(c)? {
-        if OPTISCALER_SKIP.iter().any(|s| rel.starts_with(s)) {
-            continue;
-        }
-        let src = inputs.store.file(c, &rel)?;
-        let (dst, note) = if rel == "OptiScaler.dll" {
-            (
-                exe_dir.join(slot),
-                format!("OptiScaler.dll as {slot} (first free proxy slot)"),
-            )
-        } else {
-            (
-                exe_dir.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR)),
-                format!("OptiScaler {}: {rel}", c.version),
-            )
-        };
-        if dst.exists() && rel != "OptiScaler.ini" {
-            // OptiScaler's own files beside a game mean someone else put them there.
-            return Err(Error::ForeignProxyPresent { path: dst });
-        }
-        plan.ops.push(FileOp::Copy { src, dst, note });
-    }
-    plan.components.push(pin(c));
+fn push_model(inputs: &Inputs<'_>, exe_dir: &Path, plan: &mut Plan) -> Result<()> {
+    let model = user_file(
+        inputs.settings.model_path.as_deref(),
+        "DLSS 5 model (nvngx_dlssnr.dll)",
+    )?;
+    plan.model_sha256 = Some(crate::components::fetch::sha256_file(&model)?);
+    plan.ops.push(FileOp::Copy {
+        src: model,
+        dst: exe_dir.join(MODEL_DLL),
+        note: "your DLSS 5 model".into(),
+    });
     Ok(())
 }
 
-fn plan_reshade_renodx(inputs: &Inputs<'_>, exe_dir: &Path, plan: &mut Plan) -> Result<()> {
-    let reshade = component(inputs, "reshade")?;
-    let feeder = component(inputs, "dlss5-feeder")?;
+fn push_renodx(inputs: &Inputs<'_>, exe_dir: &Path, plan: &mut Plan) -> Result<()> {
     let renodx = user_file(
         inputs.settings.renodx_addon_path.as_deref(),
         "RenoDX DLSS 5 add-on (renodx-dlss5.addon64)",
     )?;
-    let runtime = user_file(
-        inputs.settings.dlss_runtime_path.as_deref(),
-        "DLSS runtime (nvngx_dlss.dll)",
-    )?;
+    plan.user_files.push((
+        RENODX_ADDON.into(),
+        crate::components::fetch::sha256_file(&renodx)?,
+    ));
+    plan.ops.push(FileOp::Copy {
+        src: renodx,
+        dst: exe_dir.join(RENODX_ADDON),
+        note: "your RenoDX DLSS 5 add-on (the neural consumer)".into(),
+    });
+    Ok(())
+}
 
-    for name in [RESHADE_PROXY, RESHADE_INI, RESHADE_PRESET, RENODX_ADDON] {
+/// ReShade as the proxy, our ini, and (for games without DLSS) the Feeder
+/// add-on, its effect, a preset that enables it, and the DLSS runtime.
+fn plan_reshade(
+    inputs: &Inputs<'_>,
+    exe_dir: &Path,
+    with_feeder: bool,
+    plan: &mut Plan,
+) -> Result<()> {
+    let reshade = component(inputs, "reshade")?;
+    let mut occupied = vec![RESHADE_PROXY, RESHADE_INI, RENODX_ADDON];
+    if with_feeder {
+        occupied.push(RESHADE_PRESET);
+    }
+    for name in occupied {
         let path = exe_dir.join(name);
         if path.exists() {
             return Err(Error::ForeignProxyPresent { path });
@@ -237,46 +257,133 @@ fn plan_reshade_renodx(inputs: &Inputs<'_>, exe_dir: &Path, plan: &mut Plan) -> 
     plan.ops.push(FileOp::WriteText {
         dst: exe_dir.join(RESHADE_INI),
         text: reshade_ini(),
-        note: "minimal ReShade settings: add-ons on, shaders folder, preset".into(),
-    });
-    plan.ops.push(FileOp::WriteText {
-        dst: exe_dir.join(RESHADE_PRESET),
-        text: reshade_preset(),
-        note: "preset that turns the DLSS 5 Feed effect on".into(),
-    });
-    for rel in inputs.store.files(feeder)? {
-        if rel.ends_with(".txt") {
-            continue;
-        }
-        plan.ops.push(FileOp::Copy {
-            src: inputs.store.file(feeder, &rel)?,
-            dst: exe_dir.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR)),
-            note: format!("DLSS5-Feeder {}: {rel}", feeder.version),
-        });
-    }
-    plan.user_files.push((
-        RENODX_ADDON.into(),
-        crate::components::fetch::sha256_file(&renodx)?,
-    ));
-    plan.ops.push(FileOp::Copy {
-        src: renodx,
-        dst: exe_dir.join(RENODX_ADDON),
-        note: "your RenoDX DLSS 5 add-on".into(),
-    });
-    plan.user_files.push((
-        DLSS_RUNTIME_DLL.into(),
-        crate::components::fetch::sha256_file(&runtime)?,
-    ));
-    plan.ops.push(FileOp::Copy {
-        src: runtime,
-        dst: exe_dir.join(DLSS_RUNTIME_DLL),
-        note: "your DLSS runtime (the game ships none)".into(),
+        note: "ReShade settings: add-ons on, DLSS 5 add-on configured".into(),
     });
     plan.components.push(pin(reshade));
-    plan.components.push(pin(feeder));
+
+    if with_feeder {
+        let feeder = component(inputs, "dlss5-feeder")?;
+        let runtime = user_file(
+            inputs.settings.dlss_runtime_path.as_deref(),
+            "DLSS runtime (nvngx_dlss.dll)",
+        )?;
+        plan.ops.push(FileOp::WriteText {
+            dst: exe_dir.join(RESHADE_PRESET),
+            text: reshade_preset(),
+            note: "preset that turns the DLSS 5 Feed effect on".into(),
+        });
+        for rel in inputs.store.files(feeder)? {
+            if rel.ends_with(".txt") {
+                continue;
+            }
+            plan.ops.push(FileOp::Copy {
+                src: inputs.store.file(feeder, &rel)?,
+                dst: exe_dir.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR)),
+                note: format!("DLSS5-Feeder {}: {rel}", feeder.version),
+            });
+        }
+        plan.user_files.push((
+            DLSS_RUNTIME_DLL.into(),
+            crate::components::fetch::sha256_file(&runtime)?,
+        ));
+        plan.ops.push(FileOp::Copy {
+            src: runtime,
+            dst: exe_dir.join(DLSS_RUNTIME_DLL),
+            note: "your DLSS runtime (the game ships none)".into(),
+        });
+        plan.components.push(pin(feeder));
+    }
     Ok(())
 }
 
+/// The OptiScaler payload (upstream or the DLSS-NR fork) beside the exe,
+/// `OptiScaler.dll` in the first free proxy slot, and `OptiScaler.ini` as
+/// shipped or with `[DlssNr] Enabled=true` for the fork.
+fn plan_optiscaler(
+    inputs: &Inputs<'_>,
+    id: &str,
+    exe_dir: &Path,
+    apis: &[GraphicsApi],
+    neural: bool,
+    plan: &mut Plan,
+) -> Result<()> {
+    let c = component(inputs, id)?;
+    let slots = if apis.contains(&GraphicsApi::Dx12) || apis.contains(&GraphicsApi::Dx11) {
+        OPTISCALER_SLOTS_DX
+    } else {
+        OPTISCALER_SLOTS_VK
+    };
+    let slot = free_slot(exe_dir, slots)?;
+    for rel in inputs.store.files(c)? {
+        if OPTISCALER_SKIP.iter().any(|s| rel.starts_with(s)) || rel.ends_with(".txt") {
+            continue;
+        }
+        let src = inputs.store.file(c, &rel)?;
+        let dst = if rel == "OptiScaler.dll" {
+            exe_dir.join(slot)
+        } else {
+            exe_dir.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR))
+        };
+        if dst.exists() {
+            // OptiScaler's own files beside a game mean someone else put them there.
+            return Err(Error::ForeignProxyPresent { path: dst });
+        }
+        if rel == "OptiScaler.ini" {
+            let text = std::fs::read_to_string(&src).map_err(|e| Error::io(&src, e))?;
+            plan.ops.push(FileOp::WriteText {
+                dst,
+                text: if neural { enable_dlssnr(&text) } else { text },
+                note: if neural {
+                    format!("{} settings with the DLSS 5 pass switched on", c.name)
+                } else {
+                    format!("{} default settings", c.name)
+                },
+            });
+            continue;
+        }
+        let note = if rel == "OptiScaler.dll" {
+            format!("{} {} as {slot} (first free proxy slot)", c.name, c.version)
+        } else {
+            format!("{} {}: {rel}", c.name, c.version)
+        };
+        plan.ops.push(FileOp::Copy { src, dst, note });
+    }
+    plan.components.push(pin(c));
+    Ok(())
+}
+
+/// Set `Enabled=true` inside the `[DlssNr]` section; the fork ships it off.
+/// Anything else in the file is left byte-for-byte as shipped.
+pub fn enable_dlssnr(ini: &str) -> String {
+    let mut out = String::with_capacity(ini.len() + 16);
+    let mut in_section = false;
+    let mut done = false;
+    for line in ini.split_inclusive('\n') {
+        let trimmed = line.trim_end_matches(['\r', '\n']);
+        if trimmed.starts_with('[') {
+            in_section = trimmed.eq_ignore_ascii_case("[DlssNr]");
+        }
+        if in_section && !done && trimmed.trim_start().starts_with("Enabled=") {
+            let eol = &line[trimmed.len()..];
+            out.push_str("Enabled=true");
+            out.push_str(eol);
+            done = true;
+            continue;
+        }
+        out.push_str(line);
+    }
+    if !done {
+        if !out.ends_with('\n') && !out.is_empty() {
+            out.push_str("\r\n");
+        }
+        out.push_str("[DlssNr]\r\nEnabled=true\r\n");
+    }
+    out
+}
+
+/// Mirrors the working MSFS 2024 install on the dev PC (PLAN §12.0d):
+/// add-ons loaded from the exe folder, overlay tutorial skipped, and the
+/// RenoDX DLSS 5 section with the neural pass on and its upscaler off.
 fn reshade_ini() -> String {
     [
         "[GENERAL]",
@@ -289,6 +396,13 @@ fn reshade_ini() -> String {
         "",
         "[OVERLAY]",
         "TutorialProgress=4",
+        "",
+        "[RenoDX.DLSS5]",
+        "EnableHooks=2",
+        "NeuralUplift=1",
+        "NREnableUpscaling=0",
+        "NRIntensity=1",
+        "NRPreset=0",
         "",
     ]
     .join("\r\n")
@@ -312,8 +426,6 @@ fn component<'a>(inputs: &Inputs<'a>, id: &str) -> Result<&'a crate::components:
             id: id.into(),
             detail: "not in the component list".into(),
         })?;
-    // Fails with ComponentMissing unless the store has it verified.
-    inputs.store.files(c)?;
     match inputs.store.status(c) {
         crate::components::ComponentStatus::Verified => Ok(c),
         other => Err(Error::ComponentMissing {
@@ -361,20 +473,11 @@ pub mod testing {
     use crate::components::store::testing::fake_component;
     use crate::model::{Analysis, Bitness, Engine, Launcher};
 
-    /// A store holding fake copies of all three components.
+    pub const FORK_INI: &str = "[Upscalers]\r\nDx12Upscaler=auto\r\n\r\n[DlssNr]\r\nToggleKey=auto\r\n; comment\r\nEnabled=auto\r\nTransferStrength=auto\r\n";
+
+    /// A store holding fake copies of all four components.
     pub fn fake_store(root: &Path) -> (ComponentStore, ComponentManifest) {
         let store = ComponentStore::at(root);
-        let optiscaler = fake_component(
-            &store,
-            "optiscaler",
-            &[
-                ("OptiScaler.dll", b"opti"),
-                ("OptiScaler.ini", b"[Upscalers]\r\n"),
-                ("libxess.dll", b"xess"),
-                ("Licenses/XeSS_LICENSE.txt", b"lic"),
-                ("D3D12_Optiscaler/D3D12Core.dll", b"core"),
-            ],
-        );
         let reshade = fake_component(
             &store,
             "reshade",
@@ -389,10 +492,34 @@ pub mod testing {
                 ("READ-ME-FIRST.txt", b"readme"),
             ],
         );
+        let fork = fake_component(
+            &store,
+            "optiscaler-dlssnr",
+            &[
+                ("OptiScaler.dll", b"opti-nr"),
+                ("OptiScaler.ini", FORK_INI.as_bytes()),
+                ("nvngx.dll_dlssnr.dll", b"snippet"),
+                ("OptiScaler/libxess.dll", b"xess"),
+                ("OptiScaler/D3D12_OptiScaler/D3D12Core.dll", b"core"),
+                ("Licenses/RenoDX_ATTRIBUTION.txt", b"lic"),
+                ("READ ME - DLSS Neural Rendering.txt", b"readme"),
+            ],
+        );
+        let upstream = fake_component(
+            &store,
+            "optiscaler",
+            &[
+                ("OptiScaler.dll", b"opti"),
+                ("OptiScaler.ini", b"[Upscalers]\r\nDx12Upscaler=auto\r\n"),
+                ("libxess.dll", b"xess"),
+                ("Licenses/XeSS_LICENSE.txt", b"lic"),
+                ("D3D12_Optiscaler/D3D12Core.dll", b"core"),
+            ],
+        );
         let manifest = ComponentManifest {
             schema: 1,
             updated: "test".into(),
-            components: vec![optiscaler, reshade, feeder],
+            components: vec![reshade, feeder, fork, upstream],
         };
         (store, manifest)
     }
@@ -424,6 +551,7 @@ pub mod testing {
             },
             cover: None,
             hidden: false,
+            mode: None,
         }
     }
 
@@ -463,49 +591,93 @@ mod tests {
             .collect()
     }
 
-    #[test]
-    fn optiscaler_plan_copies_payload_into_the_first_free_slot() {
+    fn text_of(op: &FileOp) -> String {
+        match op {
+            FileOp::WriteText { text, .. } => text.clone(),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    struct Fx {
+        _tmp: tempfile::TempDir,
+        store: ComponentStore,
+        components: ComponentManifest,
+        game_dir: PathBuf,
+        settings: Settings,
+    }
+
+    fn fx() -> Fx {
         let tmp = tempfile::tempdir().unwrap();
         let (store, components) = fake_store(&tmp.path().join("store"));
         let game_dir = tmp.path().join("game");
         std::fs::create_dir_all(&game_dir).unwrap();
         let settings = settings_with_user_files(tmp.path());
-        let game = game(&game_dir, &[GraphicsApi::Dx12], Route::OptiScaler, true);
+        Fx {
+            _tmp: tmp,
+            store,
+            components,
+            game_dir,
+            settings,
+        }
+    }
+
+    #[test]
+    fn dlss_game_gets_reshade_renodx_and_model_only() {
+        let f = fx();
+        let game = game(
+            &f.game_dir,
+            &[GraphicsApi::Dx12],
+            Route::ReShadeRenoDx,
+            true,
+        );
         let inputs = Inputs {
             game: &game,
-            store: &store,
-            components: &components,
-            settings: &settings,
+            store: &f.store,
+            components: &f.components,
+            settings: &f.settings,
         };
         let plan = plan(&inputs).unwrap();
         assert_eq!(
             names(&plan),
-            vec!["dxgi.dll", "OptiScaler.ini", "libxess.dll", MODEL_DLL]
+            vec!["dxgi.dll", "ReShade.ini", RENODX_ADDON, MODEL_DLL]
         );
         assert_eq!(plan.components.len(), 1);
+        assert_eq!(plan.user_files.len(), 1);
         assert!(plan.model_sha256.is_some());
+        let ini = text_of(&plan.ops[1]);
+        assert!(ini.contains("[RenoDX.DLSS5]"));
+        assert!(ini.contains("NeuralUplift=1"));
+        assert!(ini.contains("AddonPath=.\\"));
         let described = plan.describe();
         assert_eq!(described.len(), 5);
         assert!(described.iter().all(|c| c.kind == ChangeKind::Add));
 
-        std::fs::write(game_dir.join("dxgi.dll"), b"taken").unwrap();
-        let plan = super::plan(&inputs).unwrap();
-        assert!(names(&plan).contains(&"winmm.dll".to_string()));
+        // The DLSS runtime is not required on this route.
+        let no_runtime = Settings {
+            dlss_runtime_path: None,
+            ..f.settings.clone()
+        };
+        assert!(super::plan(&Inputs {
+            settings: &no_runtime,
+            ..inputs
+        })
+        .is_ok());
     }
 
     #[test]
-    fn reshade_plan_lists_every_piece_and_refuses_occupied_slots() {
-        let tmp = tempfile::tempdir().unwrap();
-        let (store, components) = fake_store(&tmp.path().join("store"));
-        let game_dir = tmp.path().join("game");
-        std::fs::create_dir_all(&game_dir).unwrap();
-        let settings = settings_with_user_files(tmp.path());
-        let game = game(&game_dir, &[GraphicsApi::Dx11], Route::ReShadeRenoDx, false);
+    fn no_dlss_game_adds_feeder_preset_and_runtime() {
+        let f = fx();
+        let game = game(
+            &f.game_dir,
+            &[GraphicsApi::Dx11],
+            Route::ReShadeFeeder,
+            false,
+        );
         let inputs = Inputs {
             game: &game,
-            store: &store,
-            components: &components,
-            settings: &settings,
+            store: &f.store,
+            components: &f.components,
+            settings: &f.settings,
         };
         let plan = plan(&inputs).unwrap();
         assert_eq!(
@@ -516,15 +688,15 @@ mod tests {
                 "ReShadePreset.ini",
                 "dlss5-feed.addon64",
                 "reshade-shaders/Shaders/DLSS5_Feed.fx",
-                RENODX_ADDON,
                 DLSS_RUNTIME_DLL,
+                RENODX_ADDON,
                 MODEL_DLL,
             ]
         );
         assert_eq!(plan.components.len(), 2);
         assert_eq!(plan.user_files.len(), 2);
 
-        std::fs::write(game_dir.join("ReShade.ini"), b"x").unwrap();
+        std::fs::write(f.game_dir.join("ReShade.ini"), b"x").unwrap();
         assert_eq!(
             super::plan(&inputs).unwrap_err().code(),
             "foreign_proxy_present"
@@ -532,29 +704,111 @@ mod tests {
     }
 
     #[test]
-    fn missing_user_file_or_component_is_typed() {
-        let tmp = tempfile::tempdir().unwrap();
-        let (store, components) = fake_store(&tmp.path().join("store"));
-        let game_dir = tmp.path().join("game");
-        std::fs::create_dir_all(&game_dir).unwrap();
-        let game = game(&game_dir, &[GraphicsApi::Dx12], Route::OptiScaler, true);
-
-        let no_model = Settings::default();
+    fn optiscaler_fork_gets_payload_model_and_neural_pass_on() {
+        let f = fx();
+        let game = game(
+            &f.game_dir,
+            &[GraphicsApi::Dx12],
+            Route::OptiScalerDlssNr,
+            true,
+        );
         let inputs = Inputs {
             game: &game,
-            store: &store,
-            components: &components,
-            settings: &no_model,
+            store: &f.store,
+            components: &f.components,
+            settings: &f.settings,
+        };
+        let plan = plan(&inputs).unwrap();
+        assert_eq!(
+            names(&plan),
+            vec![
+                "dxgi.dll",
+                "OptiScaler.ini",
+                "OptiScaler/libxess.dll",
+                "nvngx.dll_dlssnr.dll",
+                MODEL_DLL,
+            ]
+        );
+        let ini = text_of(&plan.ops[1]);
+        assert!(ini.contains("[DlssNr]\r\nToggleKey=auto\r\n; comment\r\nEnabled=true\r\n"));
+        assert!(
+            ini.contains("Dx12Upscaler=auto"),
+            "other sections untouched"
+        );
+        assert_eq!(plan.components[0].id, "optiscaler-dlssnr");
+        assert!(plan.model_sha256.is_some());
+        assert!(plan.user_files.is_empty());
+
+        std::fs::write(f.game_dir.join("dxgi.dll"), b"taken").unwrap();
+        let plan = super::plan(&inputs).unwrap();
+        assert!(names(&plan).contains(&"winmm.dll".to_string()));
+    }
+
+    #[test]
+    fn plain_optiscaler_has_no_model_and_default_ini() {
+        let f = fx();
+        let game = game(&f.game_dir, &[GraphicsApi::Dx12], Route::OptiScaler, true);
+        let inputs = Inputs {
+            game: &game,
+            store: &f.store,
+            components: &f.components,
+            settings: &Settings::default(),
+        };
+        let plan = plan(&inputs).unwrap();
+        assert_eq!(
+            names(&plan),
+            vec!["dxgi.dll", "OptiScaler.ini", "libxess.dll"]
+        );
+        assert_eq!(
+            text_of(&plan.ops[1]),
+            "[Upscalers]\r\nDx12Upscaler=auto\r\n"
+        );
+        assert!(plan.model_sha256.is_none());
+
+        std::fs::write(f.game_dir.join("libxess.dll"), b"someone's").unwrap();
+        assert_eq!(
+            super::plan(&inputs).unwrap_err().code(),
+            "foreign_proxy_present"
+        );
+    }
+
+    #[test]
+    fn enable_dlssnr_only_touches_that_key() {
+        assert_eq!(
+            enable_dlssnr("[A]\r\nEnabled=auto\r\n[DlssNr]\r\nEnabled=auto\r\nX=1\r\n"),
+            "[A]\r\nEnabled=auto\r\n[DlssNr]\r\nEnabled=true\r\nX=1\r\n"
+        );
+        assert_eq!(
+            enable_dlssnr("[A]\nEnabled=auto\n"),
+            "[A]\nEnabled=auto\n[DlssNr]\r\nEnabled=true\r\n"
+        );
+    }
+
+    #[test]
+    fn missing_user_file_component_or_anti_cheat_is_typed() {
+        let f = fx();
+        let game = game(
+            &f.game_dir,
+            &[GraphicsApi::Dx12],
+            Route::ReShadeRenoDx,
+            true,
+        );
+
+        let no_files = Settings::default();
+        let inputs = Inputs {
+            game: &game,
+            store: &f.store,
+            components: &f.components,
+            settings: &no_files,
         };
         assert_eq!(plan(&inputs).unwrap_err().code(), "user_file_missing");
 
-        let settings = settings_with_user_files(tmp.path());
-        let empty_store = ComponentStore::at(tmp.path().join("empty"));
+        let empty_store = ComponentStore::at(f.game_dir.join("empty"));
         let inputs = Inputs {
             game: &game,
             store: &empty_store,
-            components: &components,
-            settings: &settings,
+            components: &f.components,
+            settings: &f.settings,
         };
         assert_eq!(plan(&inputs).unwrap_err().code(), "component_missing");
 
@@ -564,9 +818,9 @@ mod tests {
         };
         let inputs = Inputs {
             game: &blocked,
-            store: &store,
-            components: &components,
-            settings: &settings,
+            store: &f.store,
+            components: &f.components,
+            settings: &f.settings,
         };
         assert_eq!(plan(&inputs).unwrap_err().code(), "anti_cheat_blocked");
     }

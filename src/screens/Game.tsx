@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { Button } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNote } from "@/components/ErrorNote";
@@ -20,6 +21,8 @@ import type { Analysis } from "@/lib/generated/Analysis";
 import type { Preview } from "@/lib/generated/Preview";
 import type { InstallManifest } from "@/lib/generated/InstallManifest";
 import type { ChangeKind } from "@/lib/generated/ChangeKind";
+import type { InstallMode } from "@/lib/generated/InstallMode";
+import type { ErrorDto } from "@/lib/generated/ErrorDto";
 import { t } from "@/i18n";
 
 const ANTI_CHEAT_PHRASE = "REMOVE-MY-DOUBTS";
@@ -55,7 +58,11 @@ export function Game({ id }: { id: string }) {
       <div className="mb-6">{back}</div>
 
       <div className="mb-6 flex items-start gap-6">
-        <div className="aspect-[2/3] w-40 shrink-0 overflow-hidden rounded-md border border-border bg-surface-2" />
+        <div className="aspect-[2/3] w-40 shrink-0 overflow-hidden rounded-md border border-border bg-surface-2">
+          {game.cover && (
+            <img src={convertFileSrc(game.cover)} alt="" className="size-full object-cover" />
+          )}
+        </div>
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold tracking-tight">{game.title}</h1>
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -83,6 +90,10 @@ export function Game({ id }: { id: string }) {
       <div className="flex flex-col gap-4">
         <RouteSection game={game} />
         {installed ? <InstalledSection game={game} /> : game.status.kind === "ready" && <ChangesSection game={game} />}
+        {game.analysis?.ships_dlss &&
+          (game.analysis.apis.includes("dx12") || game.analysis.apis.includes("dx11")) && (
+            <AdvancedSection game={game} locked={installed} />
+          )}
       </div>
     </div>
   );
@@ -244,6 +255,55 @@ function RouteSection({ game }: { game: GameModel }) {
           </div>
         )}
       </div>
+    </Section>
+  );
+}
+
+const modes: { mode: InstallMode; label: "game.mode.dlss5" | "game.mode.optiscaler_dlss5" | "game.mode.optiscaler_only"; hint: "game.mode.dlss5Hint" | "game.mode.optiscaler_dlss5Hint" | "game.mode.optiscaler_onlyHint" }[] = [
+  { mode: "dlss5", label: "game.mode.dlss5", hint: "game.mode.dlss5Hint" },
+  { mode: "opti_scaler_dlss5", label: "game.mode.optiscaler_dlss5", hint: "game.mode.optiscaler_dlss5Hint" },
+  { mode: "opti_scaler_only", label: "game.mode.optiscaler_only", hint: "game.mode.optiscaler_onlyHint" },
+];
+
+/** Route choice for games that ship DLSS. */
+function AdvancedSection({ game, locked }: { game: GameModel; locked: boolean }) {
+  const setMode = useApp((s) => s.setMode);
+  const [error, setError] = useState<ErrorDto | null>(null);
+  const current: InstallMode = game.mode ?? "dlss5";
+  return (
+    <Section title={t("game.advanced.title")} description={t("game.advanced.body")}>
+      <div className="flex flex-col gap-2" role="radiogroup" aria-label={t("game.advanced.title")}>
+        {modes.map((m) => (
+          <label
+            key={m.mode}
+            className={[
+              "flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2",
+              current === m.mode ? "border-accent bg-surface-2" : "border-border",
+              locked ? "cursor-not-allowed opacity-60" : "",
+            ].join(" ")}
+          >
+            <input
+              type="radio"
+              name={`mode-${game.id}`}
+              value={m.mode}
+              checked={current === m.mode}
+              disabled={locked}
+              onChange={() => void setMode(game.id, m.mode === "dlss5" ? null : m.mode).then(setError)}
+              className="mt-1"
+            />
+            <span>
+              <span className="block text-sm">{t(m.label)}</span>
+              <span className="block text-xs text-text-3">{t(m.hint)}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      {locked && <p className="mt-2 text-xs text-text-3">{t("game.advanced.locked")}</p>}
+      {error && (
+        <div className="mt-2">
+          <ErrorNote error={error} />
+        </div>
+      )}
     </Section>
   );
 }

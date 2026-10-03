@@ -30,8 +30,10 @@ export const engineLabel: Record<Engine, string | null> = {
 export type Tone = "neutral" | "success" | "warning" | "danger";
 
 export const routeLabel: Record<Route, string> = {
-  optiscaler: "OptiScaler",
-  reshade_renodx: "ReShade + RenoDX",
+  reshade_renodx: "DLSS 5 (ReShade + RenoDX)",
+  reshade_feeder: "DLSS 5 (ReShade + Feeder + RenoDX)",
+  optiscaler_dlssnr: "OptiScaler + DLSS 5",
+  optiscaler: "OptiScaler only",
   reshade_vulkan: "ReShade (Vulkan)",
 };
 

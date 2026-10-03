@@ -526,13 +526,8 @@ Decisions taken in Phase 2 that change the plan (please review):
    motion-vector provider shader (`=3`, LumeniteFX, which §6 excludes as AGNYA); the
    default provider works but is "not recommended" by Feeder. Open question for
    Advanced.
-6. **Open question, not verified**: whether upstream OptiScaler actually loads a
-   `nvngx_dlssnr.dll` beside it. Feeder's README speaks of an "OptiScaler DLSS-NR
-   fork (wilsjo2)" as the neural consumer, and OptiScaler's default
-   `Dx12Upscaler=auto` resolves to XeSS. Route A follows the plan as written; a
-   real RTX 50 test is needed before trusting it, and `OptiScaler.ini` may need
-   `Dx12Upscaler=dlss` (one `EditIni` op; the planner has a `WriteText` op, no
-   `EditIni` yet).
+6. ~~Open question: whether upstream OptiScaler loads `nvngx_dlssnr.dll`.~~
+   **Answered the same evening: it does not.** See §12.0d for the corrected routes.
 
 ### 12.0c Phase 3 on the Windows PC (2026-10-03, same day)
 
@@ -567,6 +562,46 @@ Decisions taken in Phase 2 that change the plan (please review):
   source). Both writes need administrator rights, which §3 forbids by default; it
   also needs a registry *write* on the `Registry` trait and journal entries for
   files outside the game folder. Doable later behind the elevation flow.
+
+### 12.0d Route A was wrong; fixed after the first real test (2026-10-03, evening)
+
+The first real install (Bright Memory Infinite RT Benchmark, v0.1.0, Route A =
+upstream OptiScaler + model) produced no DLSS 5 pass. Diagnosis came from the
+one working DLSS 5 setup on this PC, MSFS 2024, which someone else's installer
+had set up: **no OptiScaler at all**. It is ReShade 6.8.0 add-on build as
+`dxgi.dll`, `renodx-dlss5.addon64`, `nvngx_dlssnr.dll`, and this in `ReShade.ini`:
+
+```
+[RenoDX.DLSS5]
+NeuralUplift=1
+NREnableUpscaling=0
+NRIntensity=1
+NRPreset=0
+```
+
+`ReShade.log` shows the add-on hooking the game's own `nvngx_dlss.dll`
+(`NGX hooks installed`, `feature create intercepted: feature=1 (DLSS/DLAA)`) and
+pre-loading the NR runtime. Upstream OptiScaler is an upscaler *replacement*; it
+never loads the model. The §5.4 table and §5.5 routes are superseded by this:
+
+| Game | Default route | Optional modes (Advanced, per game) |
+|---|---|---|
+| Ships DLSS, DX11/DX12 | `ReShadeRenoDx`: ReShade + RenoDX add-on + model, ini above (+`EnableHooks=2`) | `OptiScalerDlssNr`: Dagherbou's OptiScaler DLSS-NR fork (GPL-3, GitHub releases, pinned 0.2.0) + model, `[DlssNr] Enabled=true` patched into its ini; `OptiScaler`: upstream 0.9.4, no model |
+| No DLSS, DX11/DX12 | `ReShadeFeeder`: the above + DLSS5-Feeder + preset + user's `nvngx_dlss.dll` | none |
+| Vulkan | Unsupported (Phase 3) | |
+
+`InstallMode { Dlss5, OptiScalerDlss5, OptiScalerOnly }` lives on `Game.mode`
+(library.json, carried through merges), set by `set_game_mode`, refused while
+installed. The fork's own README: RTX 50 only, game must already use DLSS, DX12
+(DX11 via the bridge, Vulkan too), "Enable Neural Rendering" is off by default —
+hence the ini patch. Its NR colour composition is RenoDX's (MIT attribution).
+
+The model on this PC (`8270b350…`) is a modified build: shim shows
+"Signature by NVIDIA Corporation does not match the file", and the RenoDX log
+says "custom runtime accepted; untested build". Expected for non-RTX-50 builds.
+
+Old `optiscaler` install records from 0.1.0 still load (the variant stays in
+`Route`) so they can be removed through the app.
 
 ### 12.1 Where things stand (end of Phase 0)
 

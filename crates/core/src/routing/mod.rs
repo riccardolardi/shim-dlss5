@@ -1,14 +1,22 @@
 //! Which route a game gets, and the one sentence that explains it.
 //!
-//! The decision tree is PLAN §5.4. It is a pure function of the analysis so
-//! the whole table is unit-tested without touching a disk.
+//! The decision tree is PLAN §5.4. It is a pure function of the analysis and
+//! the user's per-game mode, so the whole table is unit-tested without
+//! touching a disk.
+//!
+//! Games that ship DLSS default to ReShade hosting the RenoDX DLSS 5 add-on
+//! over the game's own DLSS output. The user may instead pick the OptiScaler
+//! DLSS-NR fork (upscaler + neural pass in one DLL) or plain OptiScaler (no
+//! neural pass). Games without DLSS always get ReShade + DLSS5-Feeder +
+//! RenoDX. (shim 0.1.0 routed DLSS games to upstream OptiScaler, which does
+//! not load the model at all.)
 
-use crate::model::{Analysis, Bitness, GameStatus, GraphicsApi, Route};
+use crate::model::{Analysis, Bitness, GameStatus, GraphicsApi, InstallMode, Route};
 
-/// Turn an analysis into the card status. Install state (Installed /
-/// UpdateAvailable) is layered on later by the install manifest; this only
-/// answers "could we, and how".
-pub fn decide(a: &Analysis) -> GameStatus {
+/// Turn an analysis and the user's mode into the card status. Install state
+/// (Installed / UpdateAvailable) is layered on later by the install
+/// manifest; this only answers "could we, and how".
+pub fn decide(a: &Analysis, mode: Option<InstallMode>) -> GameStatus {
     if let Some(which) = a.anti_cheat {
         return GameStatus::AntiCheat { which };
     }
@@ -38,22 +46,18 @@ pub fn decide(a: &Analysis) -> GameStatus {
     };
 
     match (dx, has(GraphicsApi::Vulkan), a.ships_dlss) {
-        (Some(api), _, true) => ready(
-            Route::OptiScaler,
-            format!("{api} game that ships DLSS, so OptiScaler takes over the DLSS slot."),
-        ),
+        (Some(api), _, true) => dlss_game(api, mode.unwrap_or_default()),
         (Some(api), _, false) => ready(
-            Route::ReShadeRenoDx,
-            format!("{api} game without DLSS, so ReShade adds the RenoDX DLSS 5 pass."),
-        ),
-        (None, true, true) => ready(
-            Route::OptiScaler,
-            "Vulkan game that ships DLSS, so OptiScaler takes over the DLSS slot.".into(),
+            Route::ReShadeFeeder,
+            format!(
+                "{api} game without DLSS: ReShade loads DLSS5-Feeder to supply depth and \
+                 motion vectors, and the RenoDX DLSS 5 add-on renders from them."
+            ),
         ),
         // ReShade's Vulkan path is a machine-wide layer registered in the
         // registry, which a per-game file journal cannot undo cleanly.
-        (None, true, false) => GameStatus::Unsupported {
-            reason: "Vulkan game without DLSS (arrives in Phase 3)".into(),
+        (None, true, _) => GameStatus::Unsupported {
+            reason: "Vulkan game (arrives in Phase 3)".into(),
         },
         (None, false, _) => GameStatus::Unsupported {
             reason: match a.apis.first() {
@@ -64,6 +68,38 @@ pub fn decide(a: &Analysis) -> GameStatus {
             },
         },
     }
+}
+
+fn dlss_game(api: &str, mode: InstallMode) -> GameStatus {
+    match mode {
+        InstallMode::Dlss5 => ready(
+            Route::ReShadeRenoDx,
+            format!(
+                "{api} game that ships DLSS: ReShade loads the RenoDX DLSS 5 add-on, which \
+                 takes over the game's own DLSS pass. Turn DLSS on in the game's settings."
+            ),
+        ),
+        InstallMode::OptiScalerDlss5 => ready(
+            Route::OptiScalerDlssNr,
+            format!(
+                "{api} game that ships DLSS: the OptiScaler DLSS-NR fork replaces the DLSS \
+                 slot, upscales, then runs the DLSS 5 model on its own output. Turn DLSS on \
+                 in the game's settings; enable the pass in OptiScaler's overlay if it is off."
+            ),
+        ),
+        InstallMode::OptiScalerOnly => ready(
+            Route::OptiScaler,
+            format!(
+                "{api} game that ships DLSS: upstream OptiScaler replaces the DLSS slot with \
+                 its own upscaler. No DLSS 5 pass; the model is not used."
+            ),
+        ),
+    }
+}
+
+/// Whether the mode choice is offered for this game at all.
+pub fn mode_applies(a: &Analysis) -> bool {
+    a.ships_dlss && (a.apis.contains(&GraphicsApi::Dx12) || a.apis.contains(&GraphicsApi::Dx11))
 }
 
 fn ready(route: Route, reason: String) -> GameStatus {
@@ -105,7 +141,7 @@ mod tests {
         let mut a = analysis(&[GraphicsApi::Dx12], true);
         a.anti_cheat = Some(AntiCheat::BattlEye);
         assert_eq!(
-            decide(&a),
+            decide(&a, None),
             GameStatus::AntiCheat {
                 which: AntiCheat::BattlEye
             }
@@ -117,19 +153,19 @@ mod tests {
         let mut a = analysis(&[GraphicsApi::Dx11], false);
         a.bitness = Bitness::X86;
         assert!(
-            matches!(decide(&a), GameStatus::Unsupported { reason } if reason.contains("32-bit"))
+            matches!(decide(&a, None), GameStatus::Unsupported { reason } if reason.contains("32-bit"))
         );
     }
 
     #[test]
-    fn routing_table() {
+    fn routing_table_with_default_mode() {
         use GraphicsApi::*;
         let cases: &[(&[GraphicsApi], bool, Option<Route>)] = &[
-            (&[Dx12], true, Some(Route::OptiScaler)),
-            (&[Dx11], true, Some(Route::OptiScaler)),
-            (&[Dx12, Vulkan], false, Some(Route::ReShadeRenoDx)),
-            (&[Dx11], false, Some(Route::ReShadeRenoDx)),
-            (&[Vulkan], true, Some(Route::OptiScaler)),
+            (&[Dx12], true, Some(Route::ReShadeRenoDx)),
+            (&[Dx11], true, Some(Route::ReShadeRenoDx)),
+            (&[Dx12, Vulkan], false, Some(Route::ReShadeFeeder)),
+            (&[Dx11], false, Some(Route::ReShadeFeeder)),
+            (&[Vulkan], true, None),
             (&[Vulkan], false, None),
             (&[Dx9], false, None),
             (&[Dx10], true, None),
@@ -137,18 +173,52 @@ mod tests {
             (&[], false, None),
         ];
         for (apis, dlss, want) in cases {
-            let got = decide(&analysis(apis, *dlss));
+            let got = decide(&analysis(apis, *dlss), None);
             assert_eq!(route_of(&got), *want, "{apis:?} dlss={dlss}: {got:?}");
         }
     }
 
     #[test]
-    fn reason_names_the_api() {
-        match decide(&analysis(&[GraphicsApi::Dx12, GraphicsApi::Dx11], false)) {
-            GameStatus::Ready { reason, .. } => assert!(reason.starts_with("DX12")),
+    fn mode_picks_the_route_for_dlss_games_only() {
+        let dlss = analysis(&[GraphicsApi::Dx12], true);
+        assert_eq!(
+            route_of(&decide(&dlss, Some(InstallMode::Dlss5))),
+            Some(Route::ReShadeRenoDx)
+        );
+        assert_eq!(
+            route_of(&decide(&dlss, Some(InstallMode::OptiScalerDlss5))),
+            Some(Route::OptiScalerDlssNr)
+        );
+        assert_eq!(
+            route_of(&decide(&dlss, Some(InstallMode::OptiScalerOnly))),
+            Some(Route::OptiScaler)
+        );
+        assert!(mode_applies(&dlss));
+
+        let no_dlss = analysis(&[GraphicsApi::Dx12], false);
+        for mode in [InstallMode::OptiScalerDlss5, InstallMode::OptiScalerOnly] {
+            assert_eq!(
+                route_of(&decide(&no_dlss, Some(mode))),
+                Some(Route::ReShadeFeeder)
+            );
+        }
+        assert!(!mode_applies(&no_dlss));
+        assert!(!mode_applies(&analysis(&[GraphicsApi::Vulkan], true)));
+    }
+
+    #[test]
+    fn reason_names_the_api_and_tells_the_user_what_to_do() {
+        match decide(
+            &analysis(&[GraphicsApi::Dx12, GraphicsApi::Dx11], true),
+            None,
+        ) {
+            GameStatus::Ready { reason, .. } => {
+                assert!(reason.starts_with("DX12"));
+                assert!(reason.contains("Turn DLSS on"));
+            }
             other => panic!("{other:?}"),
         }
-        match decide(&analysis(&[GraphicsApi::Dx9], false)) {
+        match decide(&analysis(&[GraphicsApi::Dx9], false), None) {
             GameStatus::Unsupported { reason } => assert_eq!(reason, "DirectX 9 game"),
             other => panic!("{other:?}"),
         }
@@ -159,11 +229,11 @@ mod tests {
         let mut a = analysis(&[GraphicsApi::Dx12], false);
         a.foreign_reshade = true;
         assert!(
-            matches!(decide(&a), GameStatus::Unsupported { reason } if reason.contains("ReShade"))
+            matches!(decide(&a, None), GameStatus::Unsupported { reason } if reason.contains("ReShade"))
         );
         a.foreign_optiscaler = true;
         assert!(
-            matches!(decide(&a), GameStatus::Unsupported { reason } if reason.contains("OptiScaler"))
+            matches!(decide(&a, None), GameStatus::Unsupported { reason } if reason.contains("OptiScaler"))
         );
     }
 }

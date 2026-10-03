@@ -82,30 +82,52 @@ pub fn sketch(game: &Game) -> Vec<PlannedChange> {
         path: dir.join(name),
         note: note.to_string(),
     };
-    let mut out = match route {
-        Route::OptiScaler => vec![
-            add(
+    let mut out = Vec::new();
+    match route {
+        Route::ReShadeRenoDx | Route::ReShadeFeeder => {
+            out.push(add("dxgi.dll", "ReShade64.dll, renamed to the proxy slot"));
+            out.push(add(
+                "ReShade.ini",
+                "ReShade settings: add-ons on, DLSS 5 add-on configured",
+            ));
+            if *route == Route::ReShadeFeeder {
+                out.push(add(
+                    "ReShadePreset.ini",
+                    "preset that turns the DLSS 5 Feed effect on",
+                ));
+                out.push(add("dlss5-feed.addon64", "DLSS 5 feeder add-on"));
+                out.push(add(
+                    "reshade-shaders\\Shaders\\DLSS5_Feed.fx",
+                    "feeder effect",
+                ));
+                out.push(add("nvngx_dlss.dll", "your DLSS runtime"));
+            }
+            out.push(add("renodx-dlss5.addon64", "your RenoDX DLSS 5 add-on"));
+            out.push(add("nvngx_dlssnr.dll", "your DLSS 5 model"));
+        }
+        Route::OptiScalerDlssNr => {
+            out.push(add(
                 "dxgi.dll",
-                "OptiScaler.dll, renamed to the first free proxy slot",
-            ),
-            add("OptiScaler.ini", "OptiScaler default settings"),
-            add("libxess.dll", "OptiScaler payload (several DLLs)"),
-        ],
-        Route::ReShadeRenoDx => vec![
-            add("dxgi.dll", "ReShade64.dll, renamed to the proxy slot"),
-            add("ReShade.ini", "minimal ReShade settings (add-ons enabled)"),
-            add(
-                "ReShadePreset.ini",
-                "preset that turns the DLSS 5 Feed effect on",
-            ),
-            add("dlss5-feed.addon64", "DLSS 5 feeder add-on"),
-            add("reshade-shaders\\Shaders\\DLSS5_Feed.fx", "feeder effect"),
-            add("renodx-dlss5.addon64", "your RenoDX DLSS 5 add-on"),
-            add("nvngx_dlss.dll", "your DLSS runtime"),
-        ],
-        Route::ReShadeVulkan => Vec::new(),
-    };
-    out.push(add("nvngx_dlssnr.dll", "your DLSS 5 model"));
+                "OptiScaler DLSS-NR fork, in the first free proxy slot",
+            ));
+            out.push(add(
+                "OptiScaler.ini",
+                "settings with the DLSS 5 pass switched on",
+            ));
+            out.push(add("nvngx.dll_dlssnr.dll", "the fork's NGX snippet"));
+            out.push(add(
+                "OptiScaler\\libxess.dll",
+                "OptiScaler payload (several DLLs)",
+            ));
+            out.push(add("nvngx_dlssnr.dll", "your DLSS 5 model"));
+        }
+        Route::OptiScaler => {
+            out.push(add("dxgi.dll", "OptiScaler, in the first free proxy slot"));
+            out.push(add("OptiScaler.ini", "OptiScaler default settings"));
+            out.push(add("libxess.dll", "OptiScaler payload (several DLLs)"));
+        }
+        Route::ReShadeVulkan => return Vec::new(),
+    }
     out.push(add(
         "shim.json",
         "install record (lets shim undo everything)",
@@ -127,7 +149,7 @@ mod tests {
         let (store, components) = fake_store(&tmp.path().join("store"));
         let game_dir = tmp.path().join("game");
         std::fs::create_dir_all(&game_dir).unwrap();
-        let game = game(&game_dir, &[GraphicsApi::Dx12], Route::OptiScaler, true);
+        let game = game(&game_dir, &[GraphicsApi::Dx12], Route::ReShadeRenoDx, true);
 
         let settings = settings_with_user_files(tmp.path());
         let exact = preview(&Inputs {
@@ -140,7 +162,7 @@ mod tests {
         assert!(exact
             .changes
             .iter()
-            .any(|c| c.path.ends_with("libxess.dll")));
+            .any(|c| c.path.ends_with("renodx-dlss5.addon64")));
 
         let none = Settings::default();
         let empty = ComponentStore::at(tmp.path().join("empty"));
@@ -151,7 +173,7 @@ mod tests {
             settings: &none,
         });
         assert!(!sketched.exact);
-        assert_eq!(sketched.blocker.unwrap().code, "user_file_missing");
+        assert_eq!(sketched.blocker.unwrap().code, "component_missing");
         assert!(sketched
             .changes
             .iter()
