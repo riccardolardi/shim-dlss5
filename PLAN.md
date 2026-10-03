@@ -422,3 +422,149 @@ redistributable upstream exists, more translations.
    from. Current stance: show hash and signature status, link nothing.
 4. **Code signing certificate.** Cost vs. SmartScreen friction. Publish hashes from
    day one either way.
+
+---
+
+## 12. Handoff (written 2026-10-03, end of Phase 0 on macOS)
+
+Read this first if you are picking the project up on the Windows PC.
+
+### 12.1 Where things stand
+
+- Repo: `git@github.com:riccardolardi/shim-dlss5.git`, branch `main`. Product name
+  **shim**; crates `shim-core`, `shim-win`, Tauri crate/exe `shim`. Local folder on
+  the Mac was still called `dlss5er`; the name does not matter.
+- Phase 0 is complete and runs. On macOS the app boots, renders the three screens,
+  saves settings, quarantines damaged JSON and shows the warning, and logs to
+  `<data dir>/logs/shim.log`. Scanning is disabled off-Windows and the UI says so.
+- Data dir: `%LOCALAPPDATA%\shim` (override with `SHIM_DATA_DIR`).
+- Test counts at handoff: 45 Rust (core), 13 front end. clippy `-D warnings`,
+  rustfmt and `tsc` are clean. CI: core jobs green on Linux/macOS; the Front end
+  and Windows jobs failed once on the rolldown native-binding lockfile problem
+  (see 12.4); the fix is in the same commit as this section. Check the Actions
+  tab for the first fully green run before trusting the Windows job.
+- Nothing has been written into a game folder yet. There is no install code.
+
+### 12.2 How to get going on Windows
+
+```powershell
+winget install Rustlang.Rustup   # or rustup-init.exe; stable toolchain
+winget install OpenJS.NodeJS.LTS # Node 22
+# Visual Studio Build Tools with "Desktop development with C++" + Windows SDK
+# WebView2 is preinstalled on Windows 10/11
+git clone git@github.com:riccardolardi/shim-dlss5.git && cd shim-dlss5
+npm install
+npm run tauri dev                # hot-reloading app
+cargo test --workspace           # also regenerates src/lib/generated/*.ts
+npm test
+```
+
+First thing to confirm on Windows: `npm run tauri dev` opens the window, the
+Library's Scan button is enabled (`app_info.can_scan` is true), and
+`%LOCALAPPDATA%\shim\logs\shim.log` is written. Then CI's Windows job should be
+green on the next push.
+
+### 12.3 Code map (what exists, where to add things)
+
+| Path | What it is | Notes for Phase 1 |
+|---|---|---|
+| `crates/core/src/model.rs` | `Launcher`, `GraphicsApi`, `Bitness`, `AntiCheat`, `Route`, `GameStatus`, `DiscoveredGame`, `Analysis`, `Game` | All `#[ts(export)]`; run `cargo test -p shim-core` after changing |
+| `crates/core/src/error.rs` | One `Error` enum with `code()`, `user_message()`, `detail()`, `to_dto()` | Add variants, never swallow |
+| `crates/core/src/discovery/mod.rs` | `LauncherAdapter` trait, `discover_all`, `default_adapters()` (empty) | Add `steam.rs`, `epic.rs`, `gog.rs` here; register in `default_adapters` under `#[cfg(windows)]` or make them take the `Registry` trait so they test everywhere |
+| `crates/core/src/platform.rs` | `Registry`, `SignatureChecker` traits, `Unavailable` impls | Adapters read the registry only through `Registry` |
+| `crates/win/src/registry.rs` | Real `Registry` via `winreg` 0.56 | No WOW64 flag: name `SOFTWARE\WOW6432Node\...` explicitly |
+| `crates/core/src/library.rs` | `Library`, `game_id()` (sha256 of normalised path), `merge_scan`, `with_hidden` | `merge_scan` keeps games of failed/unavailable launchers; tests cover it |
+| `crates/core/src/persist.rs` | `read_json`, `read_json_or_quarantine`, `write_json` (temp + fsync + rename) | Use for every file we own |
+| `crates/core/src/settings.rs` | `Settings`, `ScanSources`, `validated()` | |
+| `crates/core/src/paths.rs` | `AppPaths` | |
+| `crates/core/src/api.rs` | `AppInfo`, `ScanReport` (Tauri boundary shapes) | Keep boundary types here so one test regenerates all TS |
+| `src-tauri/src/commands.rs` | `app_info`, `get_settings`, `save_settings`, `get_library`, `scan_library` | `scan_library` has a re-entry guard; make it `spawn_blocking` once scans do real I/O |
+| `src-tauri/src/lib.rs` | logging (stderr + file), fatal message box on Windows | Logging is initialised before `AppState::boot` on purpose |
+| `src-tauri/tauri.conf.json` | window, CSP, `assetProtocol` scope `$LOCALDATA/shim/cache/covers/**` | Covers via `convertFileSrc` will work once files land there |
+| `src/store/app.ts` | zustand store: screen, info, settings, library, scan | Optimistic settings save with safe rollback |
+| `src/lib/status.ts` | status line + filter logic (tested) | |
+| `src/i18n/en.json` | all UI strings | Keys only; no hard-coded English in components |
+| `src/design/tokens.css` | the only place colours/radii/type live | |
+| `fixtures/` | does not exist yet | Create fake game trees for exe/API/anti-cheat tests |
+
+### 12.4 Things learned the hard way (do not relearn)
+
+- **ts-rs 12**: export dir is set once in `.cargo/config.toml` (`TS_RS_EXPORT_DIR`);
+  do not use `export_to` per type. `u64` exports as `bigint`; annotate
+  `#[ts(type = "number | null")]` on timestamps. Bindings are committed and CI
+  diffs them.
+- **Vite 8 / rolldown lockfile**: the native binding is an optional dep per OS. A
+  lockfile made on one OS omits the others' bindings, so `npm ci` fails elsewhere
+  (npm/cli#4828). CI therefore runs `npm install` (still pinned by the lockfile).
+  Regenerating the lockfile on Windows will add the Windows binding; keep
+  `npm install` in CI regardless.
+- **Tauri CI order**: `tauri::generate_context!` embeds `../dist` at compile time,
+  so `npm run build` must run before any `cargo` step that compiles `src-tauri`.
+- **zustand selectors** must return stable references. `useApp(s => s.x ?? [])`
+  re-renders forever and blanks the window. Select the parent and derive outside.
+- **cargo fmt and the editor**: formatting rewrites files; re-read before editing.
+- **Quarantine, don't reset**: damaged `settings.json`/`library.json` are renamed
+  to `.bad` and reported via `AppInfo.startup_warnings`. Keep that behaviour for
+  every file we add (manifests especially).
+- Release builds have no console (`windows_subsystem = "windows"`); the file log
+  and the fatal `MessageBoxW` are the only visible output.
+
+### 12.5 Review items deliberately deferred
+
+From the Phase 0 code review, not yet done:
+
+- `Registry` trait has no WOW64 view parameter; add one if an adapter needs both
+  views of the same key.
+- `Library.tsx` uses `useApp()` without a selector (re-renders on every store
+  change). Fine at this size; switch to selectors when the grid gets big.
+- `settings.language` is wired to `setLanguage` but there is only `en`.
+- `opener:default` capability covers URLs only; "Open folder" needs
+  `opener:allow-open-path` with a scope when implemented.
+- Commands are sync except `save_settings`/`scan_library`; move real I/O to
+  `tauri::async_runtime::spawn_blocking`.
+
+### 12.6 Phase 1, concrete order of work
+
+Goal: Library shows real games with real status lines; Game page shows badges and
+the routing sentence; nothing is written to game folders.
+
+1. **Fixtures**: `fixtures/games/<case>/...` with tiny fake exes (hand-built PE
+   headers are enough for bitness and import-string scans), DLSS dlls, anti-cheat
+   markers, Unreal/Unity layouts. Tests read these; no registry needed.
+2. **Steam adapter** (`discovery/steam.rs`): `SteamPath` from `HKCU\Software\Valve\Steam`,
+   `steamapps\libraryfolders.vdf` via `keyvalues-parser`, each `appmanifest_*.acf`
+   (title, installdir, appid, `StateFlags` == 4 fully installed). Skip tools/redists
+   by appid list. Test the parsers on fixture VDF/ACF text.
+3. **Epic** (`%ProgramData%\Epic\EpicGamesLauncher\Data\Manifests\*.item`) and
+   **GOG** (`HKLM\SOFTWARE\WOW6432Node\GOG.com\Games\*`).
+4. **Analysis** (`analysis/`): `exe_resolver.rs` (scoring per PLAN §5.2),
+   `pe.rs` (goblin: machine type, section bytes), `apis.rs` (string scan per §5.3),
+   `dlss.rs` (DLSS/Streamline/model presence + versions), `anticheat.rs` (markers
+   per §5.3). Pure functions over a path; cached by exe size+mtime.
+5. **Routing** (`routing/router.rs`): the tree in §5.4, returning `Route` plus a
+   `reason` string that becomes the one sentence on the Game page.
+6. **Wire-up**: `scan_library` runs discovery then analysis in `spawn_blocking`,
+   emits progress events (`tauri::Emitter`), sets `GameStatus`. Game page gets
+   badges, the sentence, and a disabled Install button with "What will change"
+   showing the planned file list from a `Planner` stub.
+7. Artwork can wait for Phase 3; the card already handles `cover: null`.
+
+### 12.7 Reference: what the original did that is worth copying as ideas
+
+From the analysis of NODIX-TECH/DLSS-5-MANAGER (source-available, not reusable code):
+
+- Route choice: DX9 → DX9 route; DX10 → DX11 route; ships DLSS → OptiScaler;
+  DX11 → DX11 route; else DX12. Vulkan only by user choice.
+- OptiScaler proxy slot order: DX12 `dxgi, winmm, version, dbghelp, d3d12, wininet,
+  winhttp`; Vulkan `winmm` first. It never writes `OptiScaler.ini` except the menu key.
+- API detection: scan `.rdata/.idata/.data` for `d3d12.dll`, `D3D12CreateDevice`,
+  `d3d11.dll`, `d3d9.dll`, `vulkan-1.dll`, `vkCreateInstance`, `opengl32.dll`; ignore
+  proxy DLLs whose version resource says ReShade/OptiScaler/dgVoodoo.
+- Anti-cheat markers: EasyAntiCheat(_EOS) dirs, `start_protected_game.exe`,
+  BattlEye `beservice/beclient/bedaisy.sys`, `*_BE.exe`, `vgk.sys`, GameGuard `.des`,
+  XIGNCODE `x3.xem`, EA Javelin, Tencent ACE, mhyprot, Ricochet `randgrid.sys`.
+- Bugs to avoid: runtime-random game ids, uninstall by filename, rollback that only
+  removes files added this run, blocking HTTP inside the scan.
+
+Competitors worth a look for UX density: DLSS5-Swapper (rakanki911), DLSS5-Autopilot
+(Kizzuwatnaa, "what will happen?" preview and run-time fetch model), Optiscaler-Client.
