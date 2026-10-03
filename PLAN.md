@@ -494,10 +494,12 @@ green on the next push.
   `#[ts(type = "number | null")]` on timestamps. Bindings are committed and CI
   diffs them.
 - **Vite 8 / rolldown lockfile**: the native binding is an optional dep per OS. A
-  lockfile made on one OS omits the others' bindings, so `npm ci` fails elsewhere
-  (npm/cli#4828). CI therefore runs `npm install` (still pinned by the lockfile).
-  Regenerating the lockfile on Windows will add the Windows binding; keep
-  `npm install` in CI regardless.
+  lockfile made on one OS omits the others' bindings, so `npm ci` (and even
+  `npm install`, which trusts the lock) fails elsewhere (npm/cli#4828). Fix in
+  place: `package.json` declares `@rolldown/binding-linux-x64-gnu`,
+  `-win32-x64-msvc` and `-wasm32-wasi` as `optionalDependencies` at rolldown's
+  exact version, so the lockfile carries resolved entries for all of them. When
+  bumping vite/rolldown, bump these three to the new rolldown version.
 - **Tauri CI order**: `tauri::generate_context!` embeds `../dist` at compile time,
   so `npm run build` must run before any `cargo` step that compiles `src-tauri`.
 - **zustand selectors** must return stable references. `useApp(s => s.x ?? [])`

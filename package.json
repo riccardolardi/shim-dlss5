@@ -35,5 +35,10 @@
     "typescript": "^5",
     "vite": "^8.3.2",
     "vitest": "^5"
+  },
+  "optionalDependencies": {
+    "@rolldown/binding-linux-x64-gnu": "1.2.12",
+    "@rolldown/binding-wasm32-wasi": "1.2.12",
+    "@rolldown/binding-win32-x64-msvc": "1.2.12"
   }
 }

@@ -38,9 +38,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      # `npm install`, not `npm ci`: the lockfile is generated on one OS and omits the
-      # other platforms' optional native bindings (rolldown), see npm/cli#4828.
-      - run: npm install --no-audit --no-fund
+      - run: npm ci
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
@@ -60,9 +58,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: ". -> target"
-      # `npm install`, not `npm ci`: the lockfile is generated on one OS and omits the
-      # other platforms' optional native bindings (rolldown), see npm/cli#4828.
-      - run: npm install --no-audit --no-fund
+      - run: npm ci
       # tauri::generate_context! embeds ../dist at compile time.
       - run: npm run build
       - run: cargo clippy --workspace --all-targets -- -D warnings
