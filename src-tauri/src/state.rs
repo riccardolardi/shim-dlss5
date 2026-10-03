@@ -40,18 +40,15 @@ impl AppState {
             .map(|e| e.to_dto())
             .collect();
 
-        // An install interrupted by a crash leaves a journal; finish its undo.
-        for game in &library.games {
-            match shim_core::install::recover(&paths, &game.id) {
-                Ok(true) => {
-                    tracing::warn!(title = %game.title, "rolled back an interrupted install")
-                }
-                Ok(false) => {}
-                Err(e) => {
-                    tracing::error!(title = %game.title, detail = %e.detail(), "recovery failed");
-                    startup_warnings.push(e.to_dto());
-                }
-            }
+        // An install interrupted by a crash leaves a journal; finish its undo,
+        // whether or not the game is still in the library.
+        let (rolled_back, errors) = shim_core::install::recover_all(&paths);
+        for id in &rolled_back {
+            tracing::warn!(game_id = %id, "rolled back an interrupted install");
+        }
+        for e in errors {
+            tracing::error!(detail = %e.detail(), "recovery failed");
+            startup_warnings.push(e.to_dto());
         }
 
         tracing::info!(root = %paths.root().display(), "data directory ready");

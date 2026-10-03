@@ -70,6 +70,14 @@ impl Tree {
             };
             for entry in read.filter_map(|e| e.ok()) {
                 let path = entry.path();
+                // `file_type` does not follow links, so a junction or symlink
+                // (loops, "Application Data"-style redirects) is never entered.
+                let Ok(kind) = entry.file_type() else {
+                    continue;
+                };
+                if kind.is_symlink() {
+                    continue;
+                }
                 let Ok(meta) = entry.metadata() else { continue };
                 let name = path
                     .file_name()

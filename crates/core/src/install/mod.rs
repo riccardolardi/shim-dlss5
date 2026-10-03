@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use serde::Serialize;
 use ts_rs::TS;
 
-pub use journal::{recover, rollback, uninstall, Journal, Step};
+pub use journal::{recover, recover_all, rollback, uninstall, Journal, Step};
 pub use manifest::InstallManifest;
 pub use planner::{plan, FileOp, Inputs, Plan};
 

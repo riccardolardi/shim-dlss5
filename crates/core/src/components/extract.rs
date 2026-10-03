@@ -71,14 +71,34 @@ fn extract_zip(archive: &Path, rules: &ExtractRules, dest: &Path) -> Result<Vec<
         let Some(target) = target_for(&name, rules, dest)? else {
             continue;
         };
-        let mut bytes = Vec::with_capacity(entry.size() as usize);
-        entry
-            .read_to_end(&mut bytes)
-            .map_err(|e| archive_err(archive, e))?;
+        let hint = entry_size_hint(entry.size());
+        let bytes = read_capped(&mut entry, hint, &name).map_err(|e| archive_err(archive, e))?;
         write_file(&target, &bytes)?;
         written.push(name);
     }
     Ok(written)
+}
+
+/// Largest single file we will unpack. The biggest real entry (a DLSS DLL
+/// inside OptiScaler) is ~50 MB; this guards against decompression bombs and
+/// forged size headers.
+pub const MAX_ENTRY_BYTES: u64 = 512 * 1024 * 1024;
+
+/// Pre-allocate from the header, but never trust it beyond the cap.
+fn entry_size_hint(declared: u64) -> usize {
+    declared.min(64 * 1024 * 1024) as usize
+}
+
+/// Read a whole entry, failing instead of growing past `MAX_ENTRY_BYTES`.
+fn read_capped(reader: &mut dyn Read, hint: usize, name: &str) -> std::io::Result<Vec<u8>> {
+    let mut bytes = Vec::with_capacity(hint);
+    reader.take(MAX_ENTRY_BYTES + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > MAX_ENTRY_BYTES {
+        return Err(std::io::Error::other(format!(
+            "entry {name} is larger than {MAX_ENTRY_BYTES} bytes"
+        )));
+    }
+    Ok(bytes)
 }
 
 fn extract_7z(archive: &Path, rules: &ExtractRules, dest: &Path) -> Result<Vec<String>> {
@@ -105,8 +125,7 @@ fn extract_7z(archive: &Path, rules: &ExtractRules, dest: &Path) -> Result<Vec<S
                     return Ok(false);
                 }
             };
-            let mut bytes = Vec::with_capacity(entry.size() as usize);
-            data.read_to_end(&mut bytes)?;
+            let bytes = read_capped(data, entry_size_hint(entry.size()), &name)?;
             if let Err(e) = write_file(&target, &bytes) {
                 failure = Some(e);
                 return Ok(false);

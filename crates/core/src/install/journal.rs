@@ -1,6 +1,10 @@
-//! Apply a plan with a journal: back up before every overwrite, record after
-//! every write, roll back on the first failure. Uninstall is the same walk
-//! backwards from the saved manifest.
+//! Apply a plan with a journal: back up before every overwrite, record before
+//! and after every write, roll back on the first failure. Uninstall is the
+//! same walk backwards from the saved manifest.
+//!
+//! The journal file is written *before* each file is touched, so a crash in
+//! the middle of a copy still leaves a record saying "this target was ours;
+//! restore its backup or delete the partial file".
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -26,23 +30,29 @@ pub struct Step {
     pub message: String,
 }
 
-/// On-disk journal written after every op, so a crash mid-install leaves
-/// enough behind to finish the rollback on the next start.
+/// On-disk journal, rewritten before and after every op.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct JournalFile {
     game_id: String,
+    /// The game's executable folder: empty-folder cleanup never climbs past it.
+    root: PathBuf,
     files: Vec<FileRecord>,
 }
+
+const JOURNAL_SUFFIX: &str = ".journal.json";
 
 pub struct Journal<'a> {
     paths: &'a AppPaths,
     game_id: String,
+    root: PathBuf,
     records: Vec<FileRecord>,
 }
 
 impl<'a> Journal<'a> {
     fn journal_path(paths: &AppPaths, game_id: &str) -> PathBuf {
-        paths.installs_dir().join(format!("{game_id}.journal.json"))
+        paths
+            .installs_dir()
+            .join(format!("{game_id}{JOURNAL_SUFFIX}"))
     }
 
     /// Run every op of `plan`. On failure every change is undone and the
@@ -59,6 +69,7 @@ impl<'a> Journal<'a> {
         let mut journal = Journal {
             paths,
             game_id: game_id.to_string(),
+            root: plan.exe_dir().to_path_buf(),
             records: Vec::new(),
         };
         let total = plan.ops.len();
@@ -70,13 +81,7 @@ impl<'a> Journal<'a> {
             });
             if let Err(e) = journal.apply(op) {
                 tracing::warn!(detail = %e.detail(), "install failed, rolling back");
-                return match rollback(&journal.records) {
-                    Ok(()) => {
-                        journal.clear_journal();
-                        Err(e)
-                    }
-                    Err(rb) => Err(rb),
-                };
+                return Err(journal.undo_after(e));
             }
         }
         let manifest = InstallManifest {
@@ -91,9 +96,25 @@ impl<'a> Journal<'a> {
             anti_cheat_override,
             files: journal.records.clone(),
         };
-        manifest.save(paths)?;
+        // No record means no way to undo later, so an unsaved manifest is
+        // treated like a failed op.
+        if let Err(e) = manifest.save(paths) {
+            return Err(journal.undo_after(e));
+        }
         journal.clear_journal();
         Ok(manifest)
+    }
+
+    /// Roll back everything recorded so far; the original error wins unless
+    /// the rollback itself fails.
+    fn undo_after(&self, original: Error) -> Error {
+        match rollback(&self.records, &self.root) {
+            Ok(()) => {
+                self.clear_journal();
+                original
+            }
+            Err(rb) => rb,
+        }
     }
 
     fn apply(&mut self, op: &FileOp) -> Result<()> {
@@ -106,6 +127,17 @@ impl<'a> Journal<'a> {
         } else {
             (None, None)
         };
+        // Provisional record first: if the write below is cut short, the
+        // journal already says what to restore or delete.
+        self.records.push(FileRecord {
+            target: dst.to_path_buf(),
+            backup,
+            sha256_before,
+            sha256_after: String::new(),
+        });
+        self.persist_journal()?;
+
+        make_writable(dst);
         match op {
             FileOp::Copy { src, .. } => copy(src, dst)?,
             FileOp::WriteText { text, .. } => {
@@ -115,12 +147,10 @@ impl<'a> Journal<'a> {
                 std::fs::write(dst, text).map_err(|e| Error::io(dst, e))?;
             }
         }
-        self.records.push(FileRecord {
-            target: dst.to_path_buf(),
-            backup,
-            sha256_before,
-            sha256_after: sha256_file(dst)?,
-        });
+        let after = sha256_file(dst)?;
+        if let Some(last) = self.records.last_mut() {
+            last.sha256_after = after;
+        }
         self.persist_journal()
     }
 
@@ -139,6 +169,7 @@ impl<'a> Journal<'a> {
             &Self::journal_path(self.paths, &self.game_id),
             &JournalFile {
                 game_id: self.game_id.clone(),
+                root: self.root.clone(),
                 files: self.records.clone(),
             },
             "install journal",
@@ -152,29 +183,61 @@ impl<'a> Journal<'a> {
 
 /// Undo an install from its manifest, newest file first, then forget it.
 pub fn uninstall(paths: &AppPaths, manifest: &InstallManifest) -> Result<()> {
-    rollback(&manifest.files)?;
+    let root = manifest.exe.parent().unwrap_or(Path::new(""));
+    rollback(&manifest.files, root)?;
     manifest.delete(paths)?;
     let _ = std::fs::remove_dir_all(paths.backups_dir(&manifest.game_id));
     Ok(())
 }
 
-/// Finish a rollback left behind by a crash, if a journal exists.
+/// Finish a rollback left behind by a crash, if a journal exists for `game_id`.
 pub fn recover(paths: &AppPaths, game_id: &str) -> Result<bool> {
-    let path = Journal::journal_path(paths, game_id);
-    let Some(journal): Option<JournalFile> = read_json(&path, "install journal")? else {
+    recover_file(&Journal::journal_path(paths, game_id))
+}
+
+/// Finish every interrupted install, whatever game it belonged to. Returns
+/// the ids that were rolled back; errors are collected, not short-circuited.
+pub fn recover_all(paths: &AppPaths) -> (Vec<String>, Vec<Error>) {
+    let mut done = Vec::new();
+    let mut errors = Vec::new();
+    let Ok(read) = std::fs::read_dir(paths.installs_dir()) else {
+        return (done, errors);
+    };
+    for entry in read.filter_map(|e| e.ok()) {
+        let path = entry.path();
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
+        let Some(game_id) = name
+            .as_deref()
+            .and_then(|n| n.strip_suffix(JOURNAL_SUFFIX))
+            .map(str::to_string)
+        else {
+            continue;
+        };
+        match recover_file(&path) {
+            Ok(true) => done.push(game_id),
+            Ok(false) => {}
+            Err(e) => errors.push(e),
+        }
+    }
+    (done, errors)
+}
+
+fn recover_file(path: &Path) -> Result<bool> {
+    let Some(journal): Option<JournalFile> = read_json(path, "install journal")? else {
         return Ok(false);
     };
-    rollback(&journal.files)?;
-    let _ = std::fs::remove_file(&path);
+    rollback(&journal.files, &journal.root)?;
+    let _ = std::fs::remove_file(path);
     Ok(true)
 }
 
 /// Restore every backup and delete every file we added, in reverse order.
 /// Keeps going after a failure so as much as possible is undone, then
-/// reports what is left.
-pub fn rollback(records: &[FileRecord]) -> Result<()> {
+/// reports what is left. `root` (the game's folder) is never removed.
+pub fn rollback(records: &[FileRecord], root: &Path) -> Result<()> {
     let mut leftovers = Vec::new();
     for r in records.iter().rev() {
+        make_writable(&r.target);
         let result = match &r.backup {
             Some(backup) => copy(backup, &r.target),
             None => match std::fs::remove_file(&r.target) {
@@ -192,7 +255,7 @@ pub fn rollback(records: &[FileRecord]) -> Result<()> {
             leftovers.push((r.target.clone(), fix));
         }
     }
-    remove_empty_dirs(records);
+    remove_empty_dirs(records, root);
     if leftovers.is_empty() {
         Ok(())
     } else {
@@ -201,18 +264,20 @@ pub fn rollback(records: &[FileRecord]) -> Result<()> {
 }
 
 /// Folders we created for added files (e.g. `reshade-shaders\Shaders`) go
-/// away once empty; anything with other content stays.
-fn remove_empty_dirs(records: &[FileRecord]) {
+/// away once empty. The climb stops below `root`, which is never removed.
+fn remove_empty_dirs(records: &[FileRecord], root: &Path) {
+    let inside = |d: &Path| d != root && d.starts_with(root);
     let mut dirs: Vec<&Path> = records
         .iter()
         .filter(|r| r.backup.is_none())
         .filter_map(|r| r.target.parent())
+        .filter(|d| inside(d))
         .collect();
     dirs.sort_by_key(|d| std::cmp::Reverse(d.components().count()));
     dirs.dedup();
     for dir in dirs {
         let mut current = Some(dir);
-        while let Some(d) = current {
+        while let Some(d) = current.filter(|d| inside(d)) {
             if std::fs::remove_dir(d).is_err() {
                 break;
             }
@@ -225,7 +290,7 @@ fn copy(src: &Path, dst: &Path) -> Result<()> {
     if let Some(parent) = dst.parent() {
         std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
     }
-    std::fs::copy(src, dst).map(|_| ()).map_err(|e| {
+    std::fs::copy(src, dst).map_err(|e| {
         Error::io(
             if e.kind() == std::io::ErrorKind::NotFound {
                 src
@@ -234,7 +299,24 @@ fn copy(src: &Path, dst: &Path) -> Result<()> {
             },
             e,
         )
-    })
+    })?;
+    // `fs::copy` carries the read-only attribute over; our files must stay
+    // replaceable and deletable.
+    make_writable(dst);
+    Ok(())
+}
+
+/// Clear a read-only attribute so the file can be overwritten or removed.
+/// Best effort: a failure here surfaces as the real error one step later.
+fn make_writable(path: &Path) {
+    if let Ok(meta) = std::fs::metadata(path) {
+        let mut perms = meta.permissions();
+        if perms.readonly() {
+            #[allow(clippy::permissions_set_readonly_false)]
+            perms.set_readonly(false);
+            let _ = std::fs::set_permissions(path, perms);
+        }
+    }
 }
 
 fn check_writable(dir: &Path) -> Result<()> {
@@ -321,6 +403,22 @@ mod tests {
         }
     }
 
+    fn set_readonly(path: &Path, on: bool) {
+        let mut perms = std::fs::metadata(path).unwrap().permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(on);
+        std::fs::set_permissions(path, perms).unwrap();
+    }
+
+    fn record(target: PathBuf, backup: Option<PathBuf>) -> FileRecord {
+        FileRecord {
+            target,
+            backup,
+            sha256_before: None,
+            sha256_after: String::new(),
+        }
+    }
+
     #[test]
     fn install_then_uninstall_is_byte_identical() {
         for route in [Route::OptiScaler, Route::ReShadeRenoDx] {
@@ -332,6 +430,7 @@ mod tests {
 
             assert_eq!(steps.len(), f.plan.ops.len());
             assert_eq!(manifest.files.len(), f.plan.ops.len());
+            assert!(manifest.files.iter().all(|r| !r.sha256_after.is_empty()));
             assert!(f.game_dir.join(MODEL_DLL).is_file());
             assert!(f.game_dir.join("shim.json").is_file());
             assert!(InstallManifest::load(&f.paths, "g1").unwrap().is_some());
@@ -356,56 +455,88 @@ mod tests {
             assert_eq!(snapshot(&f.game_dir), before, "{route:?}");
             assert!(InstallManifest::load(&f.paths, "g1").unwrap().is_none());
             assert!(!f.paths.backups_dir("g1").exists());
+            assert!(
+                f.game_dir.is_dir(),
+                "the game folder itself is never removed"
+            );
         }
     }
 
     #[test]
     fn failure_at_every_op_rolls_back_completely() {
-        let total = fixture(Route::ReShadeRenoDx).plan.ops.len();
-        for fail_at in 0..total {
-            let f = fixture(Route::ReShadeRenoDx);
-            let before = snapshot(&f.game_dir);
-            let mut broken = f.plan.clone();
-            broken.ops[fail_at] = match &broken.ops[fail_at] {
-                FileOp::Copy { dst, note, .. } => FileOp::Copy {
+        for route in [Route::OptiScaler, Route::ReShadeRenoDx] {
+            let total = fixture(route).plan.ops.len();
+            for fail_at in 0..total {
+                let f = fixture(route);
+                let before = snapshot(&f.game_dir);
+                let mut broken = f.plan.clone();
+                let (dst, note) = (
+                    broken.ops[fail_at].dst().to_path_buf(),
+                    broken.ops[fail_at].note().to_string(),
+                );
+                broken.ops[fail_at] = FileOp::Copy {
                     src: PathBuf::from("Z:/does/not/exist"),
-                    dst: dst.clone(),
-                    note: note.clone(),
-                },
-                FileOp::WriteText { dst, note, .. } => FileOp::Copy {
-                    src: PathBuf::from("Z:/does/not/exist"),
-                    dst: dst.clone(),
-                    note: note.clone(),
-                },
-            };
-            let err = Journal::run(&f.paths, "g1", &broken, false, &mut |_| {}).unwrap_err();
-            assert_eq!(err.code(), "io", "op {fail_at}");
-            assert_eq!(
-                snapshot(&f.game_dir),
-                before,
-                "op {fail_at} left changes behind"
-            );
-            assert!(InstallManifest::load(&f.paths, "g1").unwrap().is_none());
-            assert!(!Journal::journal_path(&f.paths, "g1").exists());
+                    dst,
+                    note,
+                };
+                let err = Journal::run(&f.paths, "g1", &broken, false, &mut |_| {}).unwrap_err();
+                assert_eq!(err.code(), "io", "{route:?} op {fail_at}");
+                assert_eq!(
+                    snapshot(&f.game_dir),
+                    before,
+                    "{route:?} op {fail_at} left changes behind"
+                );
+                assert!(InstallManifest::load(&f.paths, "g1").unwrap().is_none());
+                assert!(!Journal::journal_path(&f.paths, "g1").exists());
+            }
         }
     }
 
     #[test]
-    fn recover_finishes_an_interrupted_install() {
+    fn read_only_game_files_are_replaced_and_restored() {
+        let f = fixture(Route::OptiScaler);
+        set_readonly(&f.game_dir.join("OptiScaler.ini"), true);
+        let before = snapshot(&f.game_dir);
+        let manifest = Journal::run(&f.paths, "g1", &f.plan, false, &mut |_| {}).unwrap();
+        assert_ne!(
+            std::fs::read(f.game_dir.join("OptiScaler.ini")).unwrap(),
+            b"old ini"
+        );
+        // A file someone marked read-only after our install must still go.
+        set_readonly(&f.game_dir.join("libxess.dll"), true);
+        uninstall(&f.paths, &manifest).unwrap();
+        assert_eq!(snapshot(&f.game_dir), before);
+    }
+
+    #[test]
+    fn recover_finishes_an_interrupted_install_even_mid_write() {
         let f = fixture(Route::OptiScaler);
         let before = snapshot(&f.game_dir);
         let mut journal = Journal {
             paths: &f.paths,
             game_id: "g1".into(),
+            root: f.game_dir.clone(),
             records: Vec::new(),
         };
         journal.apply(&f.plan.ops[0]).unwrap();
         journal.apply(&f.plan.ops[1]).unwrap();
+        // Simulate a crash in the middle of the third write: the provisional
+        // record is on disk, the target holds garbage, no sha256_after yet.
+        let third = &f.plan.ops[2];
+        journal
+            .records
+            .push(record(third.dst().to_path_buf(), None));
+        journal.persist_journal().unwrap();
+        std::fs::write(third.dst(), b"half written").unwrap();
+        drop(journal);
+
         assert_ne!(snapshot(&f.game_dir), before);
-        drop(journal); // "crash": the journal file stays on disk
-        assert!(recover(&f.paths, "g1").unwrap());
+        let (done, errors) = recover_all(&f.paths);
+        assert_eq!(done, vec!["g1".to_string()]);
+        assert!(errors.is_empty());
         assert_eq!(snapshot(&f.game_dir), before);
         assert!(!recover(&f.paths, "g1").unwrap());
+        assert!(recover_all(&f.paths).0.is_empty());
     }
 
     #[test]
@@ -414,20 +545,13 @@ mod tests {
         let a = tmp.path().join("a.txt");
         std::fs::write(&a, b"added").unwrap();
         let records = vec![
-            FileRecord {
-                target: a.clone(),
-                backup: None,
-                sha256_before: None,
-                sha256_after: String::new(),
-            },
-            FileRecord {
-                target: tmp.path().join("b.txt"),
-                backup: Some(PathBuf::from("Z:/missing/backup")),
-                sha256_before: None,
-                sha256_after: String::new(),
-            },
+            record(a.clone(), None),
+            record(
+                tmp.path().join("b.txt"),
+                Some(PathBuf::from("Z:/missing/backup")),
+            ),
         ];
-        let err = rollback(&records).unwrap_err();
+        let err = rollback(&records, tmp.path()).unwrap_err();
         assert!(!a.exists(), "the undoable step was still undone");
         match err {
             Error::RollbackFailed { leftovers } => {
@@ -436,6 +560,27 @@ mod tests {
             }
             other => panic!("{other:?}"),
         }
+        assert!(tmp.path().is_dir(), "the root is never removed");
+    }
+
+    #[test]
+    fn empty_dir_cleanup_never_climbs_above_the_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let game = tmp.path().join("only").join("game");
+        let deep = game.join("a").join("b").join("c.txt");
+        std::fs::create_dir_all(deep.parent().unwrap()).unwrap();
+        std::fs::write(&deep, b"x").unwrap();
+        rollback(&[record(deep.clone(), None)], &game).unwrap();
+        assert!(!game.join("a").exists(), "our empty folders go");
+        assert!(game.is_dir(), "the root stays even when empty");
+
+        // A target outside the root is deleted but its folders are left alone.
+        let outside = tmp.path().join("elsewhere").join("x.txt");
+        std::fs::create_dir_all(outside.parent().unwrap()).unwrap();
+        std::fs::write(&outside, b"x").unwrap();
+        rollback(&[record(outside.clone(), None)], &game).unwrap();
+        assert!(!outside.exists());
+        assert!(outside.parent().unwrap().is_dir());
     }
 
     #[test]

@@ -672,6 +672,18 @@ green on the next push.
   on Windows) with `features = ["blocking"]` is enough and smaller.
 - **Parallel tests sharing a temp path**: two tests building a fake zip at the same
   `%TEMP%` name raced. Build fixtures inside the test's own tempdir.
+- **Review pass after Phase 3 (2026-10-03) found and fixed**: (1) the journal wrote
+  its record only *after* a file was written, so a crash mid-copy left a corrupted
+  target with no record — now a provisional record is persisted first and filled in
+  after; (2) `fs::copy` carries the read-only attribute and `remove_file` fails on
+  read-only files on Windows — `make_writable` runs before every overwrite/removal
+  and after every copy; (3) empty-folder cleanup climbed `parent()` without a bound —
+  it now stops at the exe folder, which is also stored in the journal file;
+  (4) a manifest that fails to save after all files were written is treated as a
+  failed op and rolled back; (5) `recover_all` scans `installs\*.journal.json` at
+  boot instead of only known game ids; (6) archive entries are read through a
+  512 MB cap and a 64 MB pre-allocation cap (forged headers, bombs); (7) the folder
+  walk skips symlinks/junctions. Tests cover each.
 - **Windows paths on Unix CI**: the core is tested on macOS/Linux too, where
   `Path::is_absolute("D:\\x")` is false, `file_name()` does not split on `\`, and
   `join` inserts `/`. Paths that come from launcher records are Windows paths by
