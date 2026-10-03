@@ -761,14 +761,15 @@ Test counts: 139 core + 2 win Rust tests, 15 front-end tests; clippy `-D warning
 across the workspace, rustfmt and `tsc` clean; `e2e_install` example green against
 the real payloads.
 
-Before calling 0.1 usable (do these first, in this order):
+Done since: v0.1.0 tagged and click-tested (Components, pickers, Install, Remove
+all work in the real app); Route A corrected and `v0.1.1` tagged (§12.0d).
 
-1. **Run the app and click through once**: `npm run tauri dev` → Components: Fetch
-   all three (real downloads, progress bars) and pick a model file → a Ready game →
-   Install → Remove. The core paths are tested; the UI click-path is not.
-2. **Real RTX 50 test of Route A** (OptiScaler + model) on one of the Steam games;
-   decide on `Dx12Upscaler=dlss` and add an `EditIni` op if needed (§12.0b item 6).
-3. **Generate the minisign release key**, set `PUBLIC_KEY`, and add the remote
+Still to do before calling 0.1.x usable:
+
+1. **A real DLSS 5 result**: Bright Memory with the corrected default route, DLSS
+   on in the game, `ReShade.log` showing `NGX hooks installed`; then the
+   *OptiScaler + DLSS 5* mode for the A/B. The fork says RTX 50 only for the model.
+2. **Generate the minisign release key**, set `PUBLIC_KEY`, and add the remote
    manifest fetch (`fetch_remote_manifest`) so pins can update without a release.
 
 Phase 3 is also in (§12.0c). What remains before tagging `v0.1.0`:
