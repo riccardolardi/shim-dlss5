@@ -9,12 +9,26 @@ const toneClass: Record<Tone, string> = {
   danger: "text-danger",
 };
 
-export function GameCard({ game, onOpen }: { game: Game; onOpen: () => void }) {
+export function GameCard({
+  game,
+  onOpen,
+  onMenu,
+}: {
+  game: Game;
+  onOpen: () => void;
+  /** Right-click, with the pointer position for the menu. */
+  onMenu?: (x: number, y: number) => void;
+}) {
   const status = statusLine(game.status);
   return (
     <button
       type="button"
       onClick={onOpen}
+      onContextMenu={(e) => {
+        if (!onMenu) return;
+        e.preventDefault();
+        onMenu(e.clientX, e.clientY);
+      }}
       className="group flex w-full flex-col text-left"
       aria-label={game.title}
     >

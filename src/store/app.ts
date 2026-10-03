@@ -14,6 +14,7 @@ import type { ErrorDto } from "@/lib/generated/ErrorDto";
 import type { ComponentRow } from "@/lib/generated/ComponentRow";
 import type { ComponentProgress } from "@/lib/generated/ComponentProgress";
 import type { InstallProgress } from "@/lib/generated/InstallProgress";
+import type { UpdateInfo } from "@/lib/generated/UpdateInfo";
 
 export type Screen =
   | { kind: "library" }
@@ -48,9 +49,17 @@ interface AppState {
   /** Keyed by game id; cleared when the user leaves the page. */
   installOutcome: Record<string, InstallOutcome>;
 
+  /** A newer release, until dismissed. */
+  updateInfo: UpdateInfo | null;
+
   go: (screen: Screen) => void;
   boot: () => Promise<void>;
   scan: () => Promise<void>;
+  rescanGame: (gameId: string) => Promise<void>;
+  openFolder: (gameId: string) => Promise<ErrorDto | null>;
+  setHidden: (gameId: string, hidden: boolean) => Promise<ErrorDto | null>;
+  dismissUpdate: () => void;
+  relaunchElevated: () => Promise<ErrorDto | null>;
   updateSettings: (patch: Partial<Settings>) => Promise<ErrorDto | null>;
   loadComponents: () => Promise<void>;
   fetchComponent: (id: string) => Promise<void>;
@@ -83,6 +92,7 @@ export const useApp = create<AppState>((set, get) => ({
   installing: null,
   installProgress: null,
   installOutcome: {},
+  updateInfo: null,
 
   go: (screen) => set({ screen }),
 
@@ -94,6 +104,12 @@ export const useApp = create<AppState>((set, get) => ({
         commands.getLibrary(),
       ]);
       set({ info, settings, library, bootError: null });
+      if (settings.check_updates && info.can_scan) {
+        commands
+          .checkUpdate()
+          .then((updateInfo) => set({ updateInfo }))
+          .catch(() => {});
+      }
     } catch (e) {
       set({ bootError: toErrorDto(e) });
     }
@@ -108,11 +124,62 @@ export const useApp = create<AppState>((set, get) => ({
     try {
       const report = await commands.scanLibrary();
       set({ library: report.library, lastScan: report.outcome });
+      // Covers arrive after the scan, quietly; the library already shows.
+      commands
+        .fetchCovers()
+        .then((library) => set({ library }))
+        .catch(() => {});
     } catch (e) {
       set({ scanError: toErrorDto(e) });
     } finally {
       unlisten?.();
       set({ scanning: false, scanProgress: null });
+    }
+  },
+
+  rescanGame: async (gameId) => {
+    try {
+      const game = await commands.rescanGame(gameId);
+      set((s) => ({ library: replaceGame(s.library, game) }));
+    } catch (e) {
+      set({ scanError: toErrorDto(e) });
+    }
+  },
+
+  openFolder: async (gameId) => {
+    try {
+      await commands.openFolder(gameId);
+      return null;
+    } catch (e) {
+      return toErrorDto(e);
+    }
+  },
+
+  setHidden: async (gameId, hidden) => {
+    const current = get().settings;
+    if (!current) return null;
+    const without = current.hidden_games.filter((id) => id !== gameId);
+    const hidden_games = hidden ? [...without, gameId] : without;
+    const error = await get().updateSettings({ hidden_games });
+    if (!error) {
+      set((s) => ({
+        library: {
+          ...s.library,
+          games: s.library.games.map((g) => (g.id === gameId ? { ...g, hidden } : g)),
+        },
+      }));
+    }
+    return error;
+  },
+
+  dismissUpdate: () => set({ updateInfo: null }),
+
+  relaunchElevated: async () => {
+    try {
+      await commands.relaunchElevated();
+      return null;
+    } catch (e) {
+      return toErrorDto(e);
     }
   },
 

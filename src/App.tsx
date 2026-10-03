@@ -9,6 +9,8 @@ import { applyTheme, watchSystemTheme } from "@/lib/theme";
 import { setLanguage } from "@/i18n";
 import { ErrorNote } from "@/components/ErrorNote";
 import { Button } from "@/components/Button";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { t } from "@/i18n";
 
 export function App() {
   const screen = useApp((s) => s.screen);
@@ -17,6 +19,8 @@ export function App() {
   const language = useApp((s) => s.settings?.language ?? "en");
   const bootError = useApp((s) => s.bootError);
   const info = useApp((s) => s.info);
+  const update = useApp((s) => s.updateInfo);
+  const dismissUpdate = useApp((s) => s.dismissUpdate);
   const warnings = info?.startup_warnings ?? [];
 
   useEffect(() => {
@@ -49,6 +53,15 @@ export function App() {
             {warnings.map((w, i) => (
               <ErrorNote key={i} error={w} />
             ))}
+          </div>
+        )}
+        {update && (
+          <div className="mx-8 mt-6 flex flex-wrap items-center gap-3 rounded-md border border-border bg-surface px-3 py-2 text-sm">
+            <span>{t("update.available", { latest: update.latest, current: update.current })}</span>
+            <Button variant="primary" onClick={() => void openUrl(update.url)}>
+              {t("update.open")}
+            </Button>
+            <Button onClick={dismissUpdate}>{t("update.dismiss")}</Button>
           </div>
         )}
         {screen.kind === "library" && <Library />}

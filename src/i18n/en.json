@@ -77,6 +77,27 @@
 
   "library.progress.discovering": "Looking for games…",
   "library.progress.analysing": "Analysing {done}/{total} · {title}",
+  "library.menu.open": "Open folder",
+  "library.menu.rescan": "Rescan",
+  "library.menu.hide": "Hide from library",
+  "library.hidden": "{n} hidden · manage in Settings",
+
+  "update.available": "shim {latest} is available (you have {current}).",
+  "update.open": "Open release page",
+  "update.dismiss": "Not now",
+
+  "game.elevate": "Restart as administrator",
+  "game.elevateHint": "The game folder is not writable from here. shim can restart with administrator rights for this one install.",
+
+  "settings.folders.title": "Custom folders",
+  "settings.folders.body": "Each subfolder with a game executable is treated as a game.",
+  "settings.folders.add": "Add folder",
+  "settings.folders.remove": "Remove",
+  "settings.folders.none": "No custom folders",
+  "settings.hidden.title": "Hidden games",
+  "settings.hidden.body": "Hidden games stay in the library but are not shown. Right-click a card to hide it.",
+  "settings.hidden.none": "Nothing hidden",
+  "settings.hidden.unhide": "Unhide",
 
   "components.title": "Components",
   "components.body": "Everything shim installs comes from the publisher's own release page, pinned by version and SHA-256. Nothing is bundled.",

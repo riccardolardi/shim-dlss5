@@ -403,7 +403,9 @@ needs a real RTX 50 test before 0.1 is called usable.
 Component manifest + verified fetch, model picker, Route A and Route B, journal with
 rollback, Update and Remove, logs, confirmations. First usable release (0.1).
 
-**Phase 3 — Breadth (weeks 5–6)**
+**Phase 3 — Breadth (weeks 5–6)** ✅ code done 2026-10-03 except Route C (see §12.0c
+for why it stays out and exactly what it would take); release workflow publishes
+hashes, code signing waits for a certificate.
 Route C (Vulkan), Xbox/Ubisoft/EA adapters, custom folders, hidden games, artwork
 cache, update checker, signed release with checksums, i18n table. Release 0.2.
 
@@ -531,6 +533,40 @@ Decisions taken in Phase 2 that change the plan (please review):
    real RTX 50 test is needed before trusting it, and `OptiScaler.ini` may need
    `Dx12Upscaler=dlss` (one `EditIni` op; the planner has a `WriteText` op, no
    `EditIni` yet).
+
+### 12.0c Phase 3 on the Windows PC (2026-10-03, same day)
+
+- **Adapters**: Ubisoft (`Launcher\Installs\<id>\InstallDir` + name from the
+  `Uplay Install <id>` uninstall entry), EA (vendor keys `EA Games` / `Electronic
+  Arts` / `EA Sports` with `Install Dir`, plus uninstall entries whose Publisher is
+  Electronic Arts, deduped by folder, EA app/Origin skipped), Xbox
+  (`<drive>:\XboxGames\<Name>\Content\MicrosoftGame.config`, title from
+  `ShellVisuals DefaultDisplayName`, exe from the first `<Executable Name>`; the
+  read-only `WindowsApps` store is not scanned), Custom folders (each subfolder with
+  an exe within 3 levels). `default_adapters(&settings.scan)` now needs the sources.
+  **None of these launchers is installed on this PC**, so they are fixture-tested only.
+- **Library**: right-click menu on a card (Open folder / Rescan / Hide), hidden count
+  link, hidden list with Unhide in Settings; custom folders add/remove in Settings.
+- **Artwork**: `artwork.rs` fetches Steam `library_600x900.jpg` into
+  `cache\covers\<game_id>.jpg` after a scan (`fetch_covers` command, `cover://ready`
+  event). Non-Steam games keep the title card; no exe-icon fallback.
+- **Update check**: `update.rs` asks the GitHub latest-release API on launch when
+  `check_updates` is on; a banner offers to open the release page. Nothing is
+  downloaded. The repo is private today, so the API returns 404 until it is public
+  or a token is used; the banner simply stays hidden.
+- **Open folder** runs `explorer.exe /select,<exe>` from Rust (path from the library,
+  no plugin scope). **Elevation**: `relaunch_elevated` (ShellExecuteW `runas`) is
+  offered inline when an install fails with `game_folder_not_writable`.
+- **Release workflow** `.github/workflows/release.yml`: on tag `v*`, checks the tag
+  matches `Cargo.toml` and `tauri.conf.json`, builds the NSIS installer + portable
+  exe, writes `SHA256SUMS.txt`, creates a *draft* release. No code signing yet.
+- **Route C stays out.** ReShade on Vulkan = `ReShade64.dll` + `.json` in
+  `%ProgramData%\ReShade`, a `REG_DWORD 0` named by the json path under
+  `HKLM\SOFTWARE\Khronos\Vulkan\ImplicitLayers`, and the exe path appended to
+  `%ProgramData%\ReShade\ReShadeApps.ini` (verified in crosire/reshade's setup
+  source). Both writes need administrator rights, which §3 forbids by default; it
+  also needs a registry *write* on the `Registry` trait and journal entries for
+  files outside the game folder. Doable later behind the elevation flow.
 
 ### 12.1 Where things stand (end of Phase 0)
 
@@ -682,10 +718,15 @@ Before calling 0.1 usable (do these first, in this order):
 3. **Generate the minisign release key**, set `PUBLIC_KEY`, and add the remote
    manifest fetch (`fetch_remote_manifest`) so pins can update without a release.
 
-Then Phase 3 (§10): Route C via a Vulkan layer strategy that can be undone,
-Xbox/Ubisoft/EA adapters, custom folders, hidden games UI, artwork, update checker,
-signed release with `SHA256SUMS.txt`, "Open folder" (`opener:allow-open-path`),
-elevated relaunch when the game folder is not writable.
+Phase 3 is also in (§12.0c). What remains before tagging `v0.1.0`:
+
+4. Click through the new UI once: right-click menu, custom folder add, hidden list,
+   Components fetch, Install/Remove. Then `git tag v0.1.0 && git push --tags` and
+   publish the draft release the workflow creates.
+5. Make the repo public (or give the update checker a token) so the update banner
+   can work; verify the Steam cover fetch fills the Library cards.
+6. Later: Route C behind the elevation flow; code signing; exe-icon cover fallback;
+   version-resource `FileDescription` in exe scoring if a real library picks wrong.
 
 Original Phase 1 goal, kept for reference: Library shows real games with real status
 lines; Game page shows badges and the routing sentence; nothing is written to game

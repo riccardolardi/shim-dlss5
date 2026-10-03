@@ -15,7 +15,9 @@ import type { InstallManifest } from "@/lib/generated/InstallManifest";
 import type { ComponentRow } from "@/lib/generated/ComponentRow";
 import type { ComponentProgress } from "@/lib/generated/ComponentProgress";
 import type { InstallProgress } from "@/lib/generated/InstallProgress";
+import type { CoverReady } from "@/lib/generated/CoverReady";
 import type { FileInfo } from "@/lib/generated/FileInfo";
+import type { UpdateInfo } from "@/lib/generated/UpdateInfo";
 import type { ErrorDto } from "@/lib/generated/ErrorDto";
 
 export const commands = {
@@ -24,6 +26,11 @@ export const commands = {
   saveSettings: (settings: Settings) => invoke<Settings>("save_settings", { settings }),
   getLibrary: () => invoke<Library>("get_library"),
   scanLibrary: () => invoke<ScanReport>("scan_library"),
+  rescanGame: (gameId: string) => invoke<Game>("rescan_game", { gameId }),
+  openFolder: (gameId: string) => invoke<void>("open_folder", { gameId }),
+  fetchCovers: () => invoke<Library>("fetch_covers"),
+  checkUpdate: () => invoke<UpdateInfo | null>("check_update"),
+  relaunchElevated: () => invoke<void>("relaunch_elevated"),
   planPreview: (gameId: string) => invoke<Preview>("plan_preview", { gameId }),
   getInstall: (gameId: string) => invoke<InstallManifest | null>("get_install", { gameId }),
   getComponents: () => invoke<ComponentRow[]>("get_components"),
@@ -42,6 +49,8 @@ export const events = {
     listen<ComponentProgress>("component://progress", (e) => handler(e.payload)),
   onInstallProgress: (handler: (p: InstallProgress) => void): Promise<UnlistenFn> =>
     listen<InstallProgress>("install://progress", (e) => handler(e.payload)),
+  onCoverReady: (handler: (p: CoverReady) => void): Promise<UnlistenFn> =>
+    listen<CoverReady>("cover://ready", (e) => handler(e.payload)),
 };
 
 export function isErrorDto(e: unknown): e is ErrorDto {

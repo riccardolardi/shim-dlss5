@@ -71,6 +71,14 @@ pub struct ComponentProgress {
     pub expected: u64,
 }
 
+/// Emitted as `cover://ready` when a cover has been cached for a game.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct CoverReady {
+    pub game_id: String,
+    pub path: String,
+}
+
 /// Emitted as `install://progress` while an install or removal runs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]

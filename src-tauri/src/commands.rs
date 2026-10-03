@@ -262,6 +262,128 @@ pub async fn remove_game(app: AppHandle, game_id: String) -> CmdResult<Game> {
     .await
 }
 
+/// Re-analyse one game from scratch (ignores the size+mtime cache).
+#[tauri::command]
+pub async fn rescan_game(app: AppHandle, game_id: String) -> CmdResult<Game> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let game = find_game(&state, &game_id)?;
+        let fresh = scan::analyse_game(
+            &Game {
+                analysis: None,
+                ..game
+            },
+            &state.paths,
+            &state.components,
+        );
+        update_game(&state, fresh)
+    })
+    .await
+}
+
+/// Show the game's executable in Explorer. The path comes from the library,
+/// never from the front end, so no path scope is needed.
+#[tauri::command]
+pub fn open_folder(state: State<'_, AppState>, game_id: String) -> CmdResult<()> {
+    let game = find_game(&state, &game_id)?;
+    let target = game
+        .analysis
+        .as_ref()
+        .map(|a| a.exe.clone())
+        .unwrap_or_else(|| game.install_dir.clone());
+    let mut cmd = std::process::Command::new("explorer.exe");
+    if target.is_file() {
+        cmd.arg(format!("/select,{}", target.display()));
+    } else {
+        cmd.arg(target.as_os_str());
+    }
+    cmd.spawn()
+        .map(|_| ())
+        .map_err(|e| Error::io(&target, e).to_dto())
+}
+
+/// Fetch missing covers for every visible game, one at a time, emitting
+/// `cover://ready` as each lands. Returns the library with cover paths set.
+#[tauri::command]
+pub async fn fetch_covers(app: AppHandle) -> CmdResult<Library> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let games = state.library.lock().map_err(poisoned)?.games.clone();
+        let covers_dir = state.paths.covers_dir();
+        let mut updated = Vec::with_capacity(games.len());
+        for game in games {
+            let game = if game.cover.as_ref().is_some_and(|c| c.is_file()) {
+                game
+            } else {
+                match shim_core::artwork::fetch_cover(&covers_dir, &game) {
+                    Ok(Some(path)) => {
+                        emit_event(
+                            &app,
+                            COVER_READY_EVENT,
+                            &shim_core::api::CoverReady {
+                                game_id: game.id.clone(),
+                                path: path.display().to_string(),
+                            },
+                        );
+                        Game {
+                            cover: Some(path),
+                            ..game
+                        }
+                    }
+                    Ok(None) => game,
+                    Err(e) => {
+                        tracing::debug!(title = %game.title, detail = %e.detail(), "no cover");
+                        game
+                    }
+                }
+            };
+            updated.push(game);
+        }
+        let mut library = state.library.lock().map_err(poisoned)?;
+        // Keep any status changes that happened meanwhile; only covers come from us.
+        let games = library
+            .games
+            .iter()
+            .map(|g| Game {
+                cover: updated
+                    .iter()
+                    .find(|u| u.id == g.id)
+                    .and_then(|u| u.cover.clone())
+                    .or_else(|| g.cover.clone()),
+                ..g.clone()
+            })
+            .collect();
+        let merged = Library {
+            games,
+            ..library.clone()
+        };
+        merged.save(&state.paths)?;
+        *library = merged.clone();
+        Ok(merged)
+    })
+    .await
+}
+
+/// Ask GitHub whether a newer release exists. `None` when up to date.
+#[tauri::command]
+pub async fn check_update() -> CmdResult<Option<shim_core::update::UpdateInfo>> {
+    blocking(|| Ok(shim_core::update::check(env!("CARGO_PKG_VERSION"))?)).await
+}
+
+/// Relaunch shim as administrator and quit this instance once UAC agreed.
+#[tauri::command]
+pub fn relaunch_elevated(app: AppHandle) -> CmdResult<()> {
+    shim_win::relaunch_elevated().map_err(|detail| ErrorDto {
+        code: "elevation_declined".into(),
+        message: "shim was not restarted as administrator.".into(),
+        detail,
+    })?;
+    app.exit(0);
+    Ok(())
+}
+
+pub const COVER_READY_EVENT: &str = "cover://ready";
+
 /// Discover, analyse and route every game, then persist. Runs on a blocking
 /// thread and emits `scan://progress`. A second scan while one runs is refused.
 #[tauri::command]
@@ -276,7 +398,7 @@ fn run_scan(app: &AppHandle) -> CmdResult<ScanReport> {
     let state = app.state::<AppState>();
     let settings = state.settings.lock().map_err(poisoned)?.clone();
     let before = state.library.lock().map_err(poisoned)?.clone();
-    let adapters = discovery::default_adapters();
+    let adapters = discovery::default_adapters(&settings.scan);
 
     let mut emit = |p: ScanProgress| emit_event(app, SCAN_PROGRESS_EVENT, &p);
     let ctx = scan::Context {

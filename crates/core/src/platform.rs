@@ -72,17 +72,22 @@ pub mod testing {
     use super::*;
     use std::collections::BTreeMap;
 
-    /// An in-memory registry. Keys compare case-insensitively like the real one.
+    /// An in-memory registry. Keys compare case-insensitively like the real
+    /// one, and subkey names keep the case they were added with.
     #[derive(Default)]
     pub struct FakeRegistry {
-        values: BTreeMap<(Hive, String), BTreeMap<String, String>>,
+        /// `(hive, lowercased key)` → `(key as written, values)`.
+        values: BTreeMap<(Hive, String), (String, BTreeMap<String, String>)>,
     }
 
     impl FakeRegistry {
         pub fn add(&mut self, hive: Hive, key: &str, values: &[(&str, &str)]) {
-            let entry = self.values.entry((hive, key.to_lowercase())).or_default();
+            let entry = self
+                .values
+                .entry((hive, key.to_lowercase()))
+                .or_insert_with(|| (key.to_string(), BTreeMap::new()));
             for (name, value) in values {
-                entry.insert(name.to_lowercase(), value.to_string());
+                entry.1.insert(name.to_lowercase(), value.to_string());
             }
         }
 
@@ -98,6 +103,7 @@ pub mod testing {
         fn read_string(&self, hive: Hive, key: &str, value: &str) -> Option<String> {
             self.values
                 .get(&(hive, key.to_lowercase()))?
+                .1
                 .get(&value.to_lowercase())
                 .cloned()
         }
@@ -106,9 +112,9 @@ pub mod testing {
             let prefix = format!("{}\\", key.to_lowercase());
             let mut out: Vec<String> = self
                 .values
-                .keys()
-                .filter(|(h, k)| *h == hive && k.starts_with(&prefix))
-                .filter_map(|(_, k)| k[prefix.len()..].split('\\').next())
+                .iter()
+                .filter(|((h, k), _)| *h == hive && k.starts_with(&prefix))
+                .filter_map(|(_, (original, _))| original[prefix.len()..].split('\\').next())
                 .map(str::to_string)
                 .collect();
             out.sort();

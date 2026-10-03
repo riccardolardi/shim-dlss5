@@ -10,7 +10,7 @@ shim-core = { path = "../core" }
 tracing.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_WinTrust", "Win32_Security_Cryptography", "Win32_System_Memory", "Win32_Security_Cryptography_Catalog", "Win32_Security_Cryptography_Sip"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_WinTrust", "Win32_Security_Cryptography", "Win32_System_Memory", "Win32_Security_Cryptography_Catalog", "Win32_Security_Cryptography_Sip", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 winreg = "0.56"
 
 [dev-dependencies]

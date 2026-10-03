@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { RefreshCw, Search } from "lucide-react";
 import { Button } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
@@ -11,8 +11,27 @@ import { t } from "@/i18n";
 
 const filters: Filter[] = ["all", "installed", "update", "anti_cheat", "unsupported"];
 
+type Menu = { gameId: string; x: number; y: number };
+
 export function Library() {
   const { library, scanning, scanProgress, scan, lastScan, scanError, info, go } = useApp();
+  const openFolder = useApp((s) => s.openFolder);
+  const rescanGame = useApp((s) => s.rescanGame);
+  const setHidden = useApp((s) => s.setHidden);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<Filter>("all");
+  const [menu, setMenu] = useState<Menu | null>(null);
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    window.addEventListener("click", close);
+    window.addEventListener("keydown", close);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("keydown", close);
+    };
+  }, [menu]);
 
   const progressText = !scanning
     ? null
@@ -23,8 +42,8 @@ export function Library() {
           title: scanProgress.title,
         })
       : t("library.progress.discovering");
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
+
+  const hiddenCount = library.games.filter((g) => g.hidden).length;
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -36,6 +55,12 @@ export function Library() {
   }, [library.games, query, filter]);
 
   const canScan = info?.can_scan ?? false;
+
+  const menuItems: { label: string; run: (id: string) => void }[] = [
+    { label: t("library.menu.open"), run: (id) => void openFolder(id) },
+    { label: t("library.menu.rescan"), run: (id) => void rescanGame(id) },
+    { label: t("library.menu.hide"), run: (id) => void setHidden(id, true) },
+  ];
 
   return (
     <div className="px-8 py-6">
@@ -80,6 +105,15 @@ export function Library() {
             </button>
           ))}
         </div>
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            onClick={() => go({ kind: "settings" })}
+            className="ml-auto text-xs text-text-3 underline-offset-2 hover:underline"
+          >
+            {t("library.hidden", { n: hiddenCount })}
+          </button>
+        )}
       </div>
 
       {scanError && (
@@ -122,9 +156,38 @@ export function Library() {
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-5">
           {visible.map((g) => (
-            <GameCard key={g.id} game={g} onOpen={() => go({ kind: "game", id: g.id })} />
+            <GameCard
+              key={g.id}
+              game={g}
+              onOpen={() => go({ kind: "game", id: g.id })}
+              onMenu={(x, y) => setMenu({ gameId: g.id, x, y })}
+            />
           ))}
         </div>
+      )}
+
+      {menu && (
+        <ul
+          role="menu"
+          className="fixed z-50 min-w-44 rounded-md border border-border bg-surface p-1 text-sm shadow-[var(--shadow)]"
+          style={{ left: menu.x, top: menu.y }}
+        >
+          {menuItems.map((item) => (
+            <li key={item.label} role="none">
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  item.run(menu.gameId);
+                  setMenu(null);
+                }}
+                className="w-full rounded px-2.5 py-1.5 text-left hover:bg-surface-2"
+              >
+                {item.label}
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

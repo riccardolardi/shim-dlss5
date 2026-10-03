@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { Button } from "@/components/Button";
 import { ErrorNote } from "@/components/ErrorNote";
 import { PageHeader, Section } from "@/components/Section";
 import { Toggle } from "@/components/Toggle";
@@ -23,7 +25,7 @@ const sources: (keyof Omit<ScanSources, "custom_folders">)[] = [
 const themes: Theme[] = ["system", "light", "dark"];
 
 export function Settings() {
-  const { settings, info, updateSettings } = useApp();
+  const { settings, info, updateSettings, library, setHidden } = useApp();
   const [error, setError] = useState<ErrorDto | null>(null);
 
   if (!settings) return null;
@@ -31,6 +33,15 @@ export function Settings() {
   const save = async (patch: Parameters<typeof updateSettings>[0]) => {
     setError(await updateSettings(patch));
   };
+
+  const addFolder = async () => {
+    const picked = await open({ directory: true, multiple: false });
+    if (typeof picked === "string" && !settings.scan.custom_folders.includes(picked)) {
+      await save({ scan: { ...settings.scan, custom_folders: [...settings.scan.custom_folders, picked] } });
+    }
+  };
+
+  const hidden = library.games.filter((g) => g.hidden).sort((a, b) => a.title.localeCompare(b.title));
 
   return (
     <div className="px-8 py-6">
@@ -53,6 +64,53 @@ export function Settings() {
               />
             ))}
           </div>
+        </Section>
+
+        <Section title={t("settings.folders.title")} description={t("settings.folders.body")}>
+          <div className="flex flex-col gap-2">
+            {settings.scan.custom_folders.length === 0 && (
+              <p className="text-sm text-text-3">{t("settings.folders.none")}</p>
+            )}
+            {settings.scan.custom_folders.map((folder) => (
+              <div key={folder} className="flex items-center justify-between gap-3 text-sm">
+                <span className="select-text truncate" title={folder}>
+                  {folder}
+                </span>
+                <Button
+                  onClick={() =>
+                    void save({
+                      scan: {
+                        ...settings.scan,
+                        custom_folders: settings.scan.custom_folders.filter((f) => f !== folder),
+                      },
+                    })
+                  }
+                >
+                  {t("settings.folders.remove")}
+                </Button>
+              </div>
+            ))}
+            <div>
+              <Button onClick={() => void addFolder()}>{t("settings.folders.add")}</Button>
+            </div>
+          </div>
+        </Section>
+
+        <Section title={t("settings.hidden.title")} description={t("settings.hidden.body")}>
+          {hidden.length === 0 ? (
+            <p className="text-sm text-text-3">{t("settings.hidden.none")}</p>
+          ) : (
+            <div className="divide-y divide-border">
+              {hidden.map((g) => (
+                <div key={g.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                  <span className="truncate">{g.title}</span>
+                  <Button onClick={() => void setHidden(g.id, false).then((e) => setError(e))}>
+                    {t("settings.hidden.unhide")}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </Section>
 
         <Section title={t("settings.appearance.title")}>

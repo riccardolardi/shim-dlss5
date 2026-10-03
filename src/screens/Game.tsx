@@ -97,6 +97,8 @@ function RouteSection({ game }: { game: GameModel }) {
   const install = useApp((st) => st.install);
   const remove = useApp((st) => st.remove);
   const update = useApp((st) => st.update);
+  const openFolder = useApp((st) => st.openFolder);
+  const relaunchElevated = useApp((st) => st.relaunchElevated);
   const [confirm, setConfirm] = useState<"none" | "remove" | "anti_cheat">("none");
   const [phrase, setPhrase] = useState("");
   const [blocker, setBlocker] = useState<Preview["blocker"]>(null);
@@ -182,7 +184,7 @@ function RouteSection({ game }: { game: GameModel }) {
               {busyHere ? t("game.removing") : t("game.remove")}
             </Button>
           )}
-          <Button disabled>{t("game.openFolder")}</Button>
+          <Button onClick={() => void openFolder(game.id)}>{t("game.openFolder")}</Button>
           {s.kind === "ready" && blocker && (
             <span className="text-xs text-warning">{t("game.notReady", { message: blocker.message })}</span>
           )}
@@ -235,6 +237,12 @@ function RouteSection({ game }: { game: GameModel }) {
         )}
 
         {outcome && <Outcome outcome={outcome} />}
+        {outcome?.kind === "failed" && outcome.error.code === "game_folder_not_writable" && (
+          <div className="flex flex-wrap items-center gap-3 text-xs text-text-2">
+            <span>{t("game.elevateHint")}</span>
+            <Button onClick={() => void relaunchElevated()}>{t("game.elevate")}</Button>
+          </div>
+        )}
       </div>
     </Section>
   );

@@ -9,6 +9,8 @@ use shim_core::platform::Platform;
 #[cfg(windows)]
 mod authenticode;
 #[cfg(windows)]
+mod elevate;
+#[cfg(windows)]
 mod registry;
 
 /// The best platform this build can offer.
@@ -28,4 +30,17 @@ pub fn platform() -> Platform {
 
 pub fn is_windows() -> bool {
     cfg!(windows)
+}
+
+/// Start an elevated copy of this executable (UAC prompt). The caller exits
+/// the current process on `Ok`.
+pub fn relaunch_elevated() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        elevate::relaunch_elevated()
+    }
+    #[cfg(not(windows))]
+    {
+        Err("elevation only exists on Windows".to_string())
+    }
 }

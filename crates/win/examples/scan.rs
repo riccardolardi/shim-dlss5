@@ -12,7 +12,7 @@ use shim_core::{discovery, library::Library, model::GameStatus, scan, settings::
 fn main() {
     let platform = shim_win::platform();
     let settings = Settings::default();
-    let adapters = discovery::default_adapters();
+    let adapters = discovery::default_adapters(&settings.scan);
     let started = std::time::Instant::now();
 
     let paths = shim_core::paths::AppPaths::at(std::env::temp_dir().join("shim-scan-example"));

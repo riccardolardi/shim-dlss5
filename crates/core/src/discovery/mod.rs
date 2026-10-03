@@ -4,10 +4,14 @@
 //! games it finds, and reports each adapter's failure separately instead of
 //! aborting the whole scan.
 
+pub mod custom;
+pub mod ea;
 pub mod epic;
 pub mod gog;
 pub mod steam;
+pub mod ubisoft;
 pub mod vdf;
+pub mod xbox;
 
 use serde::Serialize;
 use ts_rs::TS;
@@ -96,11 +100,15 @@ fn dedupe_by_install_dir(games: Vec<DiscoveredGame>) -> Vec<DiscoveredGame> {
 /// The adapters available on this build. They read the registry only through
 /// the `Registry` trait, so the same list serves every OS; off Windows the
 /// registry is empty and each adapter reports no games.
-pub fn default_adapters() -> Vec<Box<dyn LauncherAdapter>> {
+pub fn default_adapters(sources: &ScanSources) -> Vec<Box<dyn LauncherAdapter>> {
     vec![
         Box::new(steam::Steam),
         Box::new(epic::Epic::default_location()),
         Box::new(gog::Gog),
+        Box::new(xbox::Xbox::default_location()),
+        Box::new(ubisoft::Ubisoft),
+        Box::new(ea::Ea),
+        Box::new(custom::Custom::new(sources.custom_folders.clone())),
     ]
 }
 

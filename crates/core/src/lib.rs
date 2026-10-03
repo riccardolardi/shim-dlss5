@@ -6,6 +6,7 @@
 
 pub mod analysis;
 pub mod api;
+pub mod artwork;
 pub mod components;
 pub mod discovery;
 pub mod error;
@@ -18,5 +19,6 @@ pub mod platform;
 pub mod routing;
 pub mod scan;
 pub mod settings;
+pub mod update;
 
 pub use error::{Error, Result};
