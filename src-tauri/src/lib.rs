@@ -17,6 +17,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
@@ -25,6 +26,12 @@ pub fn run() {
             commands::get_library,
             commands::scan_library,
             commands::plan_preview,
+            commands::get_install,
+            commands::get_components,
+            commands::fetch_component,
+            commands::inspect_file,
+            commands::install_game,
+            commands::remove_game,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

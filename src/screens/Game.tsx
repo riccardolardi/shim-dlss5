@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
+import { ErrorNote } from "@/components/ErrorNote";
 import { Section } from "@/components/Section";
 import { useApp } from "@/store/app";
 import { commands } from "@/lib/commands";
@@ -16,13 +17,19 @@ import {
 } from "@/lib/status";
 import type { Game as GameModel } from "@/lib/generated/Game";
 import type { Analysis } from "@/lib/generated/Analysis";
-import type { PlannedChange } from "@/lib/generated/PlannedChange";
+import type { Preview } from "@/lib/generated/Preview";
+import type { InstallManifest } from "@/lib/generated/InstallManifest";
 import type { ChangeKind } from "@/lib/generated/ChangeKind";
 import { t } from "@/i18n";
+
+const ANTI_CHEAT_PHRASE = "REMOVE-MY-DOUBTS";
 
 export function Game({ id }: { id: string }) {
   const go = useApp((s) => s.go);
   const game = useApp((s) => s.library.games.find((g) => g.id === id));
+  const clearOutcome = useApp((s) => s.clearOutcome);
+
+  useEffect(() => () => clearOutcome(id), [id, clearOutcome]);
 
   const back = (
     <Button onClick={() => go({ kind: "library" })}>
@@ -41,6 +48,7 @@ export function Game({ id }: { id: string }) {
   }
 
   const status = statusLine(game.status);
+  const installed = game.status.kind === "installed" || game.status.kind === "update_available";
 
   return (
     <div className="px-8 py-6">
@@ -74,24 +82,58 @@ export function Game({ id }: { id: string }) {
 
       <div className="flex flex-col gap-4">
         <RouteSection game={game} />
-        {game.status.kind === "ready" && <ChangesSection game={game} />}
+        {installed ? <InstalledSection game={game} /> : game.status.kind === "ready" && <ChangesSection game={game} />}
       </div>
     </div>
   );
 }
 
-/** The one sentence: what shim would do and why. */
+/** The one sentence, the primary button, and the inline progress/result. */
 function RouteSection({ game }: { game: GameModel }) {
   const s = game.status;
+  const installing = useApp((st) => st.installing);
+  const progress = useApp((st) => st.installProgress);
+  const outcome = useApp((st) => st.installOutcome[game.id]);
+  const install = useApp((st) => st.install);
+  const remove = useApp((st) => st.remove);
+  const update = useApp((st) => st.update);
+  const [confirm, setConfirm] = useState<"none" | "remove" | "anti_cheat">("none");
+  const [phrase, setPhrase] = useState("");
+  const [blocker, setBlocker] = useState<Preview["blocker"]>(null);
+
+  useEffect(() => {
+    setConfirm("none");
+    setPhrase("");
+  }, [game.id, game.status.kind]);
+
+  // Learn up front whether an install can start, so the button can say why not.
+  useEffect(() => {
+    let live = true;
+    setBlocker(null);
+    if (s.kind !== "ready") return;
+    commands
+      .planPreview(game.id)
+      .then((p) => live && setBlocker(p.blocker))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [game.id, s.kind]);
+
   if (s.kind === "pending") {
     return <Section title={t("game.pendingTitle")} description={t("game.pendingBody")}>{null}</Section>;
   }
+
+  const busyHere = installing === game.id;
+  const antiCheat = game.analysis?.anti_cheat ?? null;
   let sentence: string;
   switch (s.kind) {
     case "ready":
+      sentence = s.reason;
+      break;
     case "installed":
     case "update_available":
-      sentence = s.kind === "ready" ? s.reason : `${routeLabel[s.route]}.`;
+      sentence = `${routeLabel[s.route]}.`;
       break;
     case "anti_cheat":
       sentence = t("game.route.antiCheat", { name: antiCheatLabel[s.which] });
@@ -100,16 +142,151 @@ function RouteSection({ game }: { game: GameModel }) {
       sentence = t("game.route.unsupported", { reason: s.reason });
       break;
   }
+
+  const startInstall = () => {
+    if (antiCheat) {
+      setConfirm("anti_cheat");
+    } else {
+      void install(game.id, false);
+    }
+  };
+
   return (
     <Section title={t("game.route.title")} description={sentence}>
-      <div className="flex items-center gap-3">
-        <Button variant="primary" disabled title={t("game.installSoon")}>
-          {t("game.install")}
-        </Button>
-        <Button disabled>{t("game.openFolder")}</Button>
-        <span className="text-xs text-text-3">{t("game.installSoon")}</span>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {(s.kind === "ready" || s.kind === "anti_cheat") && (
+            <Button
+              variant="primary"
+              disabled={busyHere || installing !== null || (s.kind === "ready" && blocker !== null)}
+              onClick={startInstall}
+            >
+              {busyHere ? t("game.installing") : t("game.install")}
+            </Button>
+          )}
+          {s.kind === "update_available" && (
+            <Button
+              variant="primary"
+              disabled={busyHere || installing !== null}
+              onClick={() => void update(game.id)}
+            >
+              {busyHere ? t("game.installing") : t("game.update")}
+            </Button>
+          )}
+          {(s.kind === "installed" || s.kind === "update_available") && (
+            <Button
+              variant="danger"
+              disabled={busyHere || installing !== null}
+              onClick={() => setConfirm("remove")}
+            >
+              {busyHere ? t("game.removing") : t("game.remove")}
+            </Button>
+          )}
+          <Button disabled>{t("game.openFolder")}</Button>
+          {s.kind === "ready" && blocker && (
+            <span className="text-xs text-warning">{t("game.notReady", { message: blocker.message })}</span>
+          )}
+        </div>
+
+        {busyHere && progress && (
+          <div className="text-xs text-text-2" aria-live="polite">
+            {progress.total > 0 ? `${progress.index + 1}/${progress.total} · ` : ""}
+            {progress.message}
+          </div>
+        )}
+
+        {confirm === "remove" && (
+          <RemoveConfirm
+            gameId={game.id}
+            onCancel={() => setConfirm("none")}
+            onConfirm={() => {
+              setConfirm("none");
+              void remove(game.id);
+            }}
+          />
+        )}
+
+        {confirm === "anti_cheat" && antiCheat && (
+          <div className="rounded-md border border-danger/40 bg-danger/5 p-4 text-sm">
+            <div className="font-medium">{t("game.antiCheat.title", { name: antiCheatLabel[antiCheat] })}</div>
+            <p className="mt-1 text-text-2">{t("game.antiCheat.body")}</p>
+            <input
+              type="text"
+              value={phrase}
+              onChange={(e) => setPhrase(e.target.value)}
+              placeholder={t("game.antiCheat.placeholder")}
+              aria-label={t("game.antiCheat.placeholder")}
+              className="mt-3 h-9 w-72 rounded-md border border-border bg-surface px-3 text-sm outline-none focus:border-accent"
+            />
+            <div className="mt-3 flex gap-2">
+              <Button
+                variant="danger"
+                disabled={phrase.trim() !== ANTI_CHEAT_PHRASE}
+                onClick={() => {
+                  setConfirm("none");
+                  void install(game.id, true);
+                }}
+              >
+                {t("game.antiCheat.yes")}
+              </Button>
+              <Button onClick={() => setConfirm("none")}>{t("game.cancel")}</Button>
+            </div>
+          </div>
+        )}
+
+        {outcome && <Outcome outcome={outcome} />}
       </div>
     </Section>
+  );
+}
+
+function Outcome({ outcome }: { outcome: NonNullable<ReturnType<typeof useApp.getState>["installOutcome"][string]> }) {
+  switch (outcome.kind) {
+    case "installed":
+      return <p className="text-sm text-success">{t("game.installDone", { n: outcome.files })}</p>;
+    case "removed":
+      return <p className="text-sm text-success">{t("game.removeDone")}</p>;
+    case "failed":
+      return (
+        <div className="flex flex-col gap-2">
+          <p className="text-sm text-text-2">{t("game.installFailed")}</p>
+          <ErrorNote error={outcome.error} />
+        </div>
+      );
+  }
+}
+
+function RemoveConfirm({
+  gameId,
+  onCancel,
+  onConfirm,
+}: {
+  gameId: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const [manifest, setManifest] = useState<InstallManifest | null>(null);
+  useEffect(() => {
+    let live = true;
+    commands
+      .getInstall(gameId)
+      .then((m) => live && setManifest(m))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [gameId]);
+  return (
+    <div className="rounded-md border border-border bg-surface-2 p-4 text-sm">
+      <div className="font-medium">{t("game.removeConfirm.title")}</div>
+      <p className="mt-1 text-text-2">{t("game.removeConfirm.body", { n: manifest?.files.length ?? "…" })}</p>
+      <div className="mt-3 flex gap-2">
+        <Button variant="danger" onClick={onConfirm}>
+          {t("game.removeConfirm.yes")}
+        </Button>
+        <Button onClick={onCancel}>{t("game.cancel")}</Button>
+      </div>
+    </div>
   );
 }
 
@@ -121,39 +298,84 @@ const kindKey: Record<ChangeKind, "game.changes.add" | "game.changes.backup" | "
 
 /** The planned file list, fetched from the core planner. */
 function ChangesSection({ game }: { game: GameModel }) {
-  const [plan, setPlan] = useState<PlannedChange[] | null>(null);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const settings = useApp((s) => s.settings);
 
   useEffect(() => {
     let live = true;
     commands
       .planPreview(game.id)
-      .then((p) => live && setPlan(p))
-      .catch(() => live && setPlan([]));
+      .then((p) => live && setPreview(p))
+      .catch(() => live && setPreview({ changes: [], exact: false, blocker: null }));
+    return () => {
+      live = false;
+    };
+  }, [game.id, game.status, settings]);
+
+  return (
+    <Section title={t("game.changes.title")} description={t("game.changes.body")}>
+      {preview === null ? null : preview.changes.length === 0 ? (
+        <p className="text-sm text-text-2">{t("game.changes.none")}</p>
+      ) : (
+        <>
+          <p className="mb-2 text-xs text-text-3">{preview.exact ? t("game.exactPlan") : t("game.sketchPlan")}</p>
+          <ChangeList changes={preview.changes} root={game.install_dir} />
+        </>
+      )}
+    </Section>
+  );
+}
+
+/** What is installed right now, straight from the manifest. */
+function InstalledSection({ game }: { game: GameModel }) {
+  const [manifest, setManifest] = useState<InstallManifest | null>(null);
+  useEffect(() => {
+    let live = true;
+    commands
+      .getInstall(game.id)
+      .then((m) => live && setManifest(m))
+      .catch(() => {});
     return () => {
       live = false;
     };
   }, [game.id, game.status]);
-
+  if (!manifest) return null;
+  const changes = manifest.files.map((f) => ({
+    kind: (f.backup ? "backup" : "add") as ChangeKind,
+    path: f.target,
+    note: f.backup ? `backup: ${f.backup}` : `sha256 ${f.sha256_after.slice(0, 16)}…`,
+  }));
   return (
-    <Section title={t("game.changes.title")} description={t("game.changes.body")}>
-      {plan === null ? null : plan.length === 0 ? (
-        <p className="text-sm text-text-2">{t("game.changes.none")}</p>
-      ) : (
-        <ul className="divide-y divide-border text-sm">
-          {plan.map((c) => (
-            <li key={c.path} className="grid grid-cols-[9rem_1fr] gap-3 py-2">
-              <span className={c.kind === "add" ? "text-text-2" : "text-warning"}>{t(kindKey[c.kind])}</span>
-              <span className="min-w-0">
-                <span className="block select-text truncate font-mono text-xs" title={c.path}>
-                  {relative(game.install_dir, c.path)}
-                </span>
-                <span className="block text-xs text-text-3">{c.note}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+    <Section
+      title={t("game.changes.title")}
+      description={t("game.installed", {
+        route: routeLabel[manifest.route],
+        date: new Date(manifest.installed_at * 1000).toLocaleString(),
+        n: manifest.files.length,
+      })}
+    >
+      <ChangeList changes={changes} root={game.install_dir} />
     </Section>
+  );
+}
+
+function ChangeList({ changes, root }: { changes: { kind: ChangeKind; path: string; note: string }[]; root: string }) {
+  return (
+    <ul className="divide-y divide-border text-sm">
+      {changes.map((c) => (
+        <li key={c.path} className="grid grid-cols-[9rem_1fr] gap-3 py-2">
+          <span className={c.kind === "add" ? "text-text-2" : "text-warning"}>{t(kindKey[c.kind])}</span>
+          <span className="min-w-0">
+            <span className="block select-text truncate font-mono text-xs" title={c.path}>
+              {relative(root, c.path)}
+            </span>
+            <span className="block truncate text-xs text-text-3" title={c.note}>
+              {c.note}
+            </span>
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

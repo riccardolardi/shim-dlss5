@@ -63,6 +63,10 @@ pub struct Settings {
     pub hidden_games: Vec<String>,
     /// The user's own `nvngx_dlssnr.dll`. Never downloaded by us.
     pub model_path: Option<PathBuf>,
+    /// The user's own `renodx-dlss5.addon64` (Discord-only upstream, so never fetched).
+    pub renodx_addon_path: Option<PathBuf>,
+    /// The user's own `nvngx_dlss.dll`, needed by games that ship no DLSS.
+    pub dlss_runtime_path: Option<PathBuf>,
 }
 
 impl Default for Settings {
@@ -75,6 +79,8 @@ impl Default for Settings {
             scan: ScanSources::default(),
             hidden_games: Vec::new(),
             model_path: None,
+            renodx_addon_path: None,
+            dlss_runtime_path: None,
         }
     }
 }
@@ -124,6 +130,8 @@ impl Settings {
             },
             hidden_games: hidden,
             model_path: self.model_path.clone().filter(|p| p.is_file()),
+            renodx_addon_path: self.renodx_addon_path.clone().filter(|p| p.is_file()),
+            dlss_runtime_path: self.dlss_runtime_path.clone().filter(|p| p.is_file()),
             ..self.clone()
         }
     }

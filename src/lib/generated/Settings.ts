@@ -6,4 +6,12 @@ export type Settings = { schema: number, theme: Theme, language: string, check_u
 /**
  * The user's own `nvngx_dlssnr.dll`. Never downloaded by us.
  */
-model_path: string | null, };
+model_path: string | null, 
+/**
+ * The user's own `renodx-dlss5.addon64` (Discord-only upstream, so never fetched).
+ */
+renodx_addon_path: string | null, 
+/**
+ * The user's own `nvngx_dlss.dll`, needed by games that ship no DLSS.
+ */
+dlss_runtime_path: string | null, };

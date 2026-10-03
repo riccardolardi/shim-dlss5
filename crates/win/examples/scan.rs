@@ -15,18 +15,20 @@ fn main() {
     let adapters = discovery::default_adapters();
     let started = std::time::Instant::now();
 
-    let result = scan::run(
-        &Library::default(),
-        &settings,
-        &platform,
-        &adapters,
-        0,
-        &mut |p| {
-            if let Some(title) = &p.title {
-                eprintln!("[{}/{}] {title}", p.done + 1, p.total);
-            }
-        },
-    );
+    let paths = shim_core::paths::AppPaths::at(std::env::temp_dir().join("shim-scan-example"));
+    let components = shim_core::components::ComponentManifest::embedded();
+    let ctx = scan::Context {
+        settings: &settings,
+        platform: &platform,
+        adapters: &adapters,
+        paths: &paths,
+        components: &components,
+    };
+    let result = scan::run(&Library::default(), &ctx, 0, &mut |p| {
+        if let Some(title) = &p.title {
+            eprintln!("[{}/{}] {title}", p.done + 1, p.total);
+        }
+    });
 
     for f in &result.outcome.failures {
         println!("FAILED {:?}: {}", f.launcher, f.error.detail);

@@ -397,7 +397,9 @@ Steam/Epic/GOG adapters, exe resolution, PE analysis, anti-cheat detection, Libr
 grid with real status lines, Game screen with badges and the routing sentence.
 No writing to game folders yet. "What will change" shows the plan.
 
-**Phase 2 — Install (weeks 3–4)**
+**Phase 2 — Install (weeks 3–4)** ✅ code done 2026-10-03; see §12.0b for the six
+decisions that need your review and the one open question (OptiScaler + model) that
+needs a real RTX 50 test before 0.1 is called usable.
 Component manifest + verified fetch, model picker, Route A and Route B, journal with
 rollback, Update and Remove, logs, confirmations. First usable release (0.1).
 
@@ -464,6 +466,71 @@ Read this first if you are picking the project up.
   STALKER 2 → OptiScaler (ship DLSS, versions read), MSFS 2024 → Unsupported because
   the user's own ReShade is installed. Epic and GOG are not installed on this PC, so
   those adapters are only fixture-tested.
+
+### 12.0b Phase 2 on the Windows PC (2026-10-03, same day)
+
+All four Phase 2 steps are in. What exists:
+
+- **Components** (`crates/core/src/components/`): `components.json` at the repo root
+  is compiled in (`ComponentManifest::embedded()`) and validated by a test. Pins:
+  OptiScaler 0.9.4 (7z), ReShade 6.8.0 add-on build (the setup exe *is a zip* with
+  `ReShade64.dll` inside, so we unpack it and never run it), DLSS5-Feeder 1.17.0.
+  Hashes were computed from the publishers' assets on 2026-10-03. `fetch.rs` streams
+  with a size cap and SHA-256; `extract.rs` handles zip/7z with path-traversal
+  checks and strip/only rules; `store.rs` keeps `components\<id>\<version>\` with a
+  `.shim-component.json` record of every file's hash (`Verified`/`Missing`/`Mismatch`).
+  minisign verification exists (`verify_signature`, tested with a generated key) but
+  `PUBLIC_KEY` is `None`: no remote manifest fetch until a release key exists.
+- **Install transaction** (`crates/core/src/install/`): `planner.rs` builds `FileOp`s
+  (Copy / WriteText) per route; `journal.rs` backs up before overwrite, records after
+  each write, persists a journal file after each op, rolls back on failure, and
+  `uninstall` walks the manifest backwards; `recover()` finishes an interrupted
+  install at app start. `manifest.rs` writes `installs\<id>.json` + `shim.json`.
+  Tests: byte-identical install→uninstall for both routes, failure injected at
+  every op, crash recovery, unwritable folder, leftover reporting.
+- **Install state in the scan**: `scan::analyse_game` layers `Installed` /
+  `UpdateAvailable` from the manifest, so our own proxy DLL never reads as foreign.
+- **User files**: `Settings.model_path`, `renodx_addon_path`, `dlss_runtime_path`;
+  `inspect_file` returns size, SHA-256 and Authenticode (`shim-win/authenticode.rs`,
+  WinVerifyTrust + signer name; tested against a real signed binary).
+- **Tauri**: `get_components`, `fetch_component` (event `component://progress`),
+  `inspect_file`, `install_game(game_id, confirm_anti_cheat)` and `remove_game`
+  (event `install://progress`), `get_install`, `plan_preview` now returns a
+  `Preview {changes, exact, blocker}`. One `busy` flag serialises install/remove/fetch.
+- **UI**: Components screen with fetch buttons, progress bars and three file pickers
+  (tauri-plugin-dialog); Game page with Install / Update (= remove + install) /
+  Remove, inline remove confirmation listing the file count, anti-cheat typed
+  confirmation (`REMOVE-MY-DOUBTS`), progress line, result line, and the installed
+  file list from the manifest.
+- **Real-asset check**: `cargo run -p shim-win --example e2e_install -- <assets dir>`
+  unpacks the real downloads and runs both routes through plan → journal →
+  uninstall on a synthetic folder, asserting byte-identical restore.
+
+Decisions taken in Phase 2 that change the plan (please review):
+
+1. **RenoDX DLSS 5 add-on is user-supplied**, like the model. It is only published
+   on the RenoDX Discord; third parties mirror it. §3/§6 forbid fetching from
+   anywhere but the publisher's release page, so it joins the "your files" list.
+2. **Route B also needs the user's `nvngx_dlss.dll`**: DLSS5-Feeder documents that a
+   game without DLSS needs the DLSS runtime beside the exe, and we never fetch
+   NVIDIA runtimes. Three user files for Route B, one for Route A.
+3. **Route C (Vulkan without DLSS) is Phase 3.** ReShade on Vulkan is a machine-wide
+   implicit layer registered in `HKLM`; a per-game file journal cannot undo it
+   cleanly. The router now returns `Unsupported` for it.
+4. **ReShade is unpacked, not run.** The add-on setup exe carries a zip with
+   `ReShade64.dll`; we take only that and `ReShade64.json`.
+5. **`ReShade.ini` and `ReShadePreset.ini` are generated** (add-ons on, shader path,
+   preset enabling `DLSS5_Feed` with `DLSS5_MV_PROVIDER=0`). Feeder recommends a
+   motion-vector provider shader (`=3`, LumeniteFX, which §6 excludes as AGNYA); the
+   default provider works but is "not recommended" by Feeder. Open question for
+   Advanced.
+6. **Open question, not verified**: whether upstream OptiScaler actually loads a
+   `nvngx_dlssnr.dll` beside it. Feeder's README speaks of an "OptiScaler DLSS-NR
+   fork (wilsjo2)" as the neural consumer, and OptiScaler's default
+   `Dx12Upscaler=auto` resolves to XeSS. Route A follows the plan as written; a
+   real RTX 50 test is needed before trusting it, and `OptiScaler.ini` may need
+   `Dx12Upscaler=dlss` (one `EditIni` op; the planner has a `WriteText` op, no
+   `EditIni` yet).
 
 ### 12.1 Where things stand (end of Phase 0)
 
@@ -559,6 +626,16 @@ green on the next push.
   fixtures with Windows paths via the Write tool or PowerShell.
 - `git status` lies about generated files when `core.autocrlf` is on; trust
   `git diff --stat`. `.gitattributes` now pins LF.
+- **7z strip rules**: with `sevenz-rust2`, an entry you skip must still be read
+  through (`io::copy` to a sink) or the solid stream's checksum fails on the next
+  entry. The first OptiScaler unpack only worked because no strip rule matched.
+- **windows-sys feature gates**: `WTHelperProvDataFromStateData` and
+  `WTHelperGetProvSignerFromChain` need `Win32_Security_Cryptography_Catalog` *and*
+  `Win32_Security_Cryptography_Sip`, not just `Win32_Security_WinTrust`.
+- **reqwest 0.13** has no `rustls-tls` feature name any more; default TLS (schannel
+  on Windows) with `features = ["blocking"]` is enough and smaller.
+- **Parallel tests sharing a temp path**: two tests building a fake zip at the same
+  `%TEMP%` name raced. Build fixtures inside the test's own tempdir.
 
 ### 12.5 Review items deliberately deferred
 
@@ -589,19 +666,26 @@ Added after Phase 1:
 - The Game page's `relative()` helper lives in `screens/Game.tsx`; move to `lib/` when
   a second screen needs it.
 
-### 12.6 Phase 1, concrete order of work — ✅ all seven steps done 2026-10-03
+### 12.6 Phases 1 and 2 — ✅ done 2026-10-03 (see §12.0 and §12.0b)
 
-Next up, Phase 2 (install), in this order:
+Test counts: 139 core + 2 win Rust tests, 15 front-end tests; clippy `-D warnings`
+across the workspace, rustfmt and `tsc` clean; `e2e_install` example green against
+the real payloads.
 
-1. `components/` — `components.json` schema, fetch with pinned SHA-256, extract,
-   store under `components\<id>\<version>\`; Components screen rows become real.
-2. `install/planner.rs` — turn `PlannedChange` into `FileOp`s (`Write`, `Backup`,
-   `Delete`, `EditIni`); `journal.rs` with rollback tested by injecting a failure at
-   every op; `manifest.rs` (`installs\<game_id>.json` + `shim.json` sidecar).
-3. Derive `Installed`/`UpdateAvailable` from the manifest in `scan::analyse_game`;
-   stop treating our own proxy DLL as foreign.
-4. Model picker on the Components screen (`Settings.model_path`, hash, Authenticode
-   via `shim-win`), then enable the Install button.
+Before calling 0.1 usable (do these first, in this order):
+
+1. **Run the app and click through once**: `npm run tauri dev` → Components: Fetch
+   all three (real downloads, progress bars) and pick a model file → a Ready game →
+   Install → Remove. The core paths are tested; the UI click-path is not.
+2. **Real RTX 50 test of Route A** (OptiScaler + model) on one of the Steam games;
+   decide on `Dx12Upscaler=dlss` and add an `EditIni` op if needed (§12.0b item 6).
+3. **Generate the minisign release key**, set `PUBLIC_KEY`, and add the remote
+   manifest fetch (`fetch_remote_manifest`) so pins can update without a release.
+
+Then Phase 3 (§10): Route C via a Vulkan layer strategy that can be undone,
+Xbox/Ubisoft/EA adapters, custom folders, hidden games UI, artwork, update checker,
+signed release with `SHA256SUMS.txt`, "Open folder" (`opener:allow-open-path`),
+elevated relaunch when the game folder is not writable.
 
 Original Phase 1 goal, kept for reference: Library shows real games with real status
 lines; Game page shows badges and the routing sentence; nothing is written to game

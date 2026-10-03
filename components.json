@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "updated": "2026-10-03",
+  "components": [
+    {
+      "id": "optiscaler",
+      "name": "OptiScaler",
+      "license": "GPL-3.0",
+      "publisher": "https://github.com/optiscaler/OptiScaler",
+      "version": "0.9.4",
+      "asset": "https://github.com/optiscaler/OptiScaler/releases/download/v0.9.4/Optiscaler_0.9.4-final.20260718._MM.7z",
+      "sha256": "575cb4df866116093df75af607e37fd70e10f5163e0f23fd5c804142e80ef0ad",
+      "size": 55016448,
+      "archive": "seven_z",
+      "extract": { "strip": ["!! README", "setup_linux.sh", "setup_windows.bat"], "only": [] },
+      "summary": "Loads as a proxy DLL in games that ship DLSS and hands the DLSS slot to your DLSS 5 model."
+    },
+    {
+      "id": "reshade",
+      "name": "ReShade (add-on build)",
+      "license": "BSD-3-Clause",
+      "publisher": "https://reshade.me",
+      "version": "6.8.0",
+      "asset": "https://reshade.me/downloads/ReShade_Setup_6.8.0_Addon.exe",
+      "sha256": "afe4c8f13048306307983b8b3d41d5bf00a86820440b0e57dea10950e1176445",
+      "size": 4318424,
+      "archive": "zip",
+      "extract": { "strip": [], "only": ["ReShade64.dll", "ReShade64.json"] },
+      "summary": "Post-processing host that loads add-ons. Only the 64-bit DLL is taken out of the setup file; the installer itself is never run."
+    },
+    {
+      "id": "dlss5-feeder",
+      "name": "DLSS5-Feeder",
+      "license": "MIT",
+      "publisher": "https://github.com/jlrouzies-fr/DLSS5-Feeder",
+      "version": "1.17.0",
+      "asset": "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases/download/v1.17.0/DLSS5-Feeder-1.17.0.zip",
+      "sha256": "11a96b36ae89ef75b3cff0e03849db35591143fe4df171986502905809469e12",
+      "size": 390753,
+      "archive": "zip",
+      "extract": {
+        "strip": ["host64/", "layer-x64/", "layer-x86/", "Verify-DLSS5Feeder.ps1", "dlss5-feed.addon32"],
+        "only": []
+      },
+      "summary": "ReShade add-on that feeds depth and motion vectors to the DLSS 5 add-on in games without DLSS."
+    }
+  ]
+}

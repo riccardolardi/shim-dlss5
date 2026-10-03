@@ -7,6 +7,8 @@
 use shim_core::platform::Platform;
 
 #[cfg(windows)]
+mod authenticode;
+#[cfg(windows)]
 mod registry;
 
 /// The best platform this build can offer.
@@ -15,7 +17,7 @@ pub fn platform() -> Platform {
     {
         Platform {
             registry: Box::new(registry::WinRegistry),
-            signatures: Box::new(shim_core::platform::Unavailable),
+            signatures: Box::new(authenticode::WinAuthenticode),
         }
     }
     #[cfg(not(windows))]

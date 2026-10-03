@@ -6,6 +6,7 @@
 
 pub mod analysis;
 pub mod api;
+pub mod components;
 pub mod discovery;
 pub mod error;
 pub mod install;

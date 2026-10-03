@@ -41,6 +41,56 @@ pub enum Error {
 
     #[error("{path} is not a Windows executable: {detail}")]
     NotAnExecutable { path: PathBuf, detail: String },
+
+    #[error("components manifest is invalid: {detail}")]
+    ManifestInvalid { detail: String },
+
+    #[error("components manifest signature check failed: {detail}")]
+    ManifestSignature { detail: String },
+
+    #[error("download of {url} failed: {detail}")]
+    Download { url: String, detail: String },
+
+    #[error("{what}: SHA-256 is {actual}, expected {expected}")]
+    HashMismatch {
+        what: String,
+        expected: String,
+        actual: String,
+    },
+
+    #[error("archive problem: {detail}")]
+    Archive { detail: String },
+
+    #[error("component {id} is not available: {detail}")]
+    ComponentMissing { id: String, detail: String },
+
+    #[error("{what} has not been chosen or is missing: {detail}")]
+    UserFileMissing { what: String, detail: String },
+
+    #[error("{path} is occupied by a DLL we do not recognise")]
+    ForeignProxyPresent { path: PathBuf },
+
+    #[error("{which} anti-cheat was detected and the override was not confirmed")]
+    AntiCheatBlocked { which: String },
+
+    #[error("game folder {path} is not writable: {source}")]
+    GameFolderNotWritable {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("this game is already installed")]
+    AlreadyInstalled,
+
+    #[error("nothing from shim is installed in this game")]
+    NotInstalled,
+
+    #[error("rollback left {} file(s) behind", leftovers.len())]
+    RollbackFailed {
+        /// `(path, what to do by hand)`.
+        leftovers: Vec<(PathBuf, String)>,
+    },
 }
 
 impl Error {
@@ -75,6 +125,19 @@ impl Error {
             Self::Adapter { .. } => "adapter",
             Self::NoExecutable { .. } => "no_executable",
             Self::NotAnExecutable { .. } => "not_an_executable",
+            Self::ManifestInvalid { .. } => "manifest_invalid",
+            Self::ManifestSignature { .. } => "manifest_signature",
+            Self::Download { .. } => "download",
+            Self::HashMismatch { .. } => "hash_mismatch",
+            Self::Archive { .. } => "archive",
+            Self::ComponentMissing { .. } => "component_missing",
+            Self::UserFileMissing { .. } => "user_file_missing",
+            Self::ForeignProxyPresent { .. } => "foreign_proxy_present",
+            Self::AntiCheatBlocked { .. } => "anti_cheat_blocked",
+            Self::GameFolderNotWritable { .. } => "game_folder_not_writable",
+            Self::AlreadyInstalled => "already_installed",
+            Self::NotInstalled => "not_installed",
+            Self::RollbackFailed { .. } => "rollback_failed",
         }
     }
 
@@ -100,6 +163,41 @@ impl Error {
             Self::NotAnExecutable { path, .. } => {
                 format!("{} is not a Windows executable.", path.display())
             }
+            Self::ManifestInvalid { .. } => {
+                "The component list is damaged. Reinstall shim.".to_string()
+            }
+            Self::ManifestSignature { .. } => {
+                "The downloaded component list is not signed by shim. It was ignored.".to_string()
+            }
+            Self::Download { url, .. } => {
+                format!("Could not download {url}. Check your connection and try again.")
+            }
+            Self::HashMismatch { what, .. } => {
+                format!("{what} does not match the pinned checksum. Nothing was installed.")
+            }
+            Self::Archive { .. } => "A downloaded archive could not be unpacked.".to_string(),
+            Self::ComponentMissing { id, .. } => {
+                format!("Component {id} is not ready. Fetch it on the Components screen.")
+            }
+            Self::UserFileMissing { what, .. } => {
+                format!("Choose your {what} on the Components screen first.")
+            }
+            Self::ForeignProxyPresent { path } => format!(
+                "{} already exists and is not ours. Remove it yourself if you want shim to use that slot.",
+                path.display()
+            ),
+            Self::AntiCheatBlocked { which } => {
+                format!("{which} protects this game. Installing can get the account banned.")
+            }
+            Self::GameFolderNotWritable { path, .. } => {
+                format!("shim cannot write to {}. Try running it as administrator.", path.display())
+            }
+            Self::AlreadyInstalled => "shim is already installed in this game.".to_string(),
+            Self::NotInstalled => "Nothing from shim is installed in this game.".to_string(),
+            Self::RollbackFailed { leftovers } => format!(
+                "Undo could not finish. {} file(s) need attention; see the details.",
+                leftovers.len()
+            ),
         }
     }
 

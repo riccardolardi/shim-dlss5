@@ -1,16 +1,21 @@
-//! Install planning. Phase 1 ships only the preview: the list of files a
-//! route would add, back up or edit, so "What will change" is honest before
-//! any install code exists. Phase 2 turns this into executable `FileOp`s.
+//! Installing into a game folder: plan → journal → manifest, and the exact
+//! reverse for uninstall. Every byte written is recorded; every byte
+//! overwritten is backed up first.
 
-use std::path::{Path, PathBuf};
+pub mod journal;
+pub mod manifest;
+pub mod planner;
+
+use std::path::PathBuf;
 
 use serde::Serialize;
 use ts_rs::TS;
 
-use crate::{
-    analysis::dlss::MODEL_DLL,
-    model::{Analysis, Game, GameStatus, GraphicsApi, Route},
-};
+pub use journal::{recover, rollback, uninstall, Journal, Step};
+pub use manifest::InstallManifest;
+pub use planner::{plan, FileOp, Inputs, Plan};
+
+use crate::model::{Game, GameStatus, Route};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -33,214 +38,127 @@ pub struct PlannedChange {
     pub note: String,
 }
 
-/// Proxy names OptiScaler can take, in the order we try them (PLAN §5.5).
-pub const OPTISCALER_SLOTS_DX: &[&str] = &[
-    "dxgi.dll",
-    "winmm.dll",
-    "version.dll",
-    "dbghelp.dll",
-    "d3d12.dll",
-    "wininet.dll",
-    "winhttp.dll",
-];
-pub const OPTISCALER_SLOTS_VK: &[&str] = &["winmm.dll", "version.dll", "dbghelp.dll"];
+/// Why a real plan could not be built, for the Game page to show beside the
+/// sketch so the user knows what to fetch or choose first.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct Preview {
+    pub changes: Vec<PlannedChange>,
+    /// True when `changes` comes from a buildable plan; false for the sketch.
+    pub exact: bool,
+    pub blocker: Option<crate::error::ErrorDto>,
+}
 
-/// The preview for a game, or empty when it has no route.
-pub fn preview(game: &Game) -> Vec<PlannedChange> {
+/// The exact plan when everything is in place, otherwise a sketch of the
+/// route plus the reason the exact plan is not available yet.
+pub fn preview(inputs: &Inputs<'_>) -> Preview {
+    match plan(inputs) {
+        Ok(p) => Preview {
+            changes: p.describe(),
+            exact: true,
+            blocker: None,
+        },
+        Err(e) => Preview {
+            changes: sketch(inputs.game),
+            exact: false,
+            blocker: Some(e.to_dto()),
+        },
+    }
+}
+
+/// The route's file list from names alone, for games whose components or
+/// user files are not ready yet. Empty when the game has no route.
+pub fn sketch(game: &Game) -> Vec<PlannedChange> {
     let (Some(analysis), GameStatus::Ready { route, .. }) = (&game.analysis, &game.status) else {
         return Vec::new();
     };
     let dir = analysis.exe.parent().unwrap_or(&game.install_dir);
-    let mut out = match route {
-        Route::OptiScaler => optiscaler(dir, analysis),
-        Route::ReShadeRenoDx => reshade(dir, analysis, true),
-        Route::ReShadeVulkan => reshade(dir, analysis, false),
+    let add = |name: &str, note: &str| PlannedChange {
+        kind: if dir.join(name).exists() {
+            ChangeKind::Backup
+        } else {
+            ChangeKind::Add
+        },
+        path: dir.join(name),
+        note: note.to_string(),
     };
+    let mut out = match route {
+        Route::OptiScaler => vec![
+            add(
+                "dxgi.dll",
+                "OptiScaler.dll, renamed to the first free proxy slot",
+            ),
+            add("OptiScaler.ini", "OptiScaler default settings"),
+            add("libxess.dll", "OptiScaler payload (several DLLs)"),
+        ],
+        Route::ReShadeRenoDx => vec![
+            add("dxgi.dll", "ReShade64.dll, renamed to the proxy slot"),
+            add("ReShade.ini", "minimal ReShade settings (add-ons enabled)"),
+            add(
+                "ReShadePreset.ini",
+                "preset that turns the DLSS 5 Feed effect on",
+            ),
+            add("dlss5-feed.addon64", "DLSS 5 feeder add-on"),
+            add("reshade-shaders\\Shaders\\DLSS5_Feed.fx", "feeder effect"),
+            add("renodx-dlss5.addon64", "your RenoDX DLSS 5 add-on"),
+            add("nvngx_dlss.dll", "your DLSS runtime"),
+        ],
+        Route::ReShadeVulkan => Vec::new(),
+    };
+    out.push(add("nvngx_dlssnr.dll", "your DLSS 5 model"));
     out.push(add(
-        dir.join("shim.json"),
+        "shim.json",
         "install record (lets shim undo everything)",
     ));
     out
 }
 
-fn optiscaler(dir: &Path, a: &Analysis) -> Vec<PlannedChange> {
-    let slots = if a.apis.contains(&GraphicsApi::Dx12) || a.apis.contains(&GraphicsApi::Dx11) {
-        OPTISCALER_SLOTS_DX
-    } else {
-        OPTISCALER_SLOTS_VK
-    };
-    let slot = slots
-        .iter()
-        .find(|s| !dir.join(s).exists())
-        .unwrap_or(&slots[0]);
-    vec![
-        write(
-            dir.join(slot),
-            "OptiScaler.dll, renamed to the first free proxy slot",
-        ),
-        write(dir.join("OptiScaler.ini"), "OptiScaler default settings"),
-        write(dir.join(MODEL_DLL), "your DLSS 5 model"),
-    ]
-}
-
-fn reshade(dir: &Path, a: &Analysis, renodx: bool) -> Vec<PlannedChange> {
-    // ReShade hooks DX11 and DX12 alike through dxgi.dll; Vulkan goes through
-    // its layer mechanism, so the DLL keeps its own name.
-    let vulkan_only = !a.apis.contains(&GraphicsApi::Dx12) && !a.apis.contains(&GraphicsApi::Dx11);
-    let mut out = Vec::new();
-    if vulkan_only {
-        out.push(write(
-            dir.join("ReShade64.dll"),
-            "ReShade add-on build (Vulkan layer)",
-        ));
-    } else {
-        out.push(write(
-            dir.join("dxgi.dll"),
-            "ReShade64.dll, renamed to the proxy slot",
-        ));
-    }
-    out.push(write(
-        dir.join("ReShade.ini"),
-        "minimal ReShade settings (add-ons enabled)",
-    ));
-    if renodx {
-        out.push(write(
-            dir.join("renodx-dlss5.addon64"),
-            "RenoDX DLSS 5 add-on",
-        ));
-    }
-    out.push(write(
-        dir.join("dlss5-feed.addon64"),
-        "DLSS 5 feeder add-on",
-    ));
-    out.push(write(dir.join(MODEL_DLL), "your DLSS 5 model"));
-    out
-}
-
-/// Add when the target does not exist yet, otherwise Backup.
-fn write(path: PathBuf, note: &str) -> PlannedChange {
-    let kind = if path.exists() {
-        ChangeKind::Backup
-    } else {
-        ChangeKind::Add
-    };
-    PlannedChange {
-        kind,
-        path,
-        note: note.to_string(),
-    }
-}
-
-fn add(path: PathBuf, note: &str) -> PlannedChange {
-    PlannedChange {
-        kind: ChangeKind::Add,
-        path,
-        note: note.to_string(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Bitness, Engine, Launcher};
+    use crate::components::ComponentStore;
+    use crate::install::planner::testing::*;
+    use crate::model::GraphicsApi;
+    use crate::settings::Settings;
 
-    fn game(dir: &Path, apis: &[GraphicsApi], route: Route) -> Game {
-        Game {
-            id: "id".into(),
-            launcher: Launcher::Steam,
-            title: "G".into(),
-            install_dir: dir.to_path_buf(),
-            launcher_id: None,
-            analysis: Some(Analysis {
-                exe: dir.join("G.exe"),
-                exe_size: 1,
-                exe_mtime: 1,
-                bitness: Bitness::X64,
-                apis: apis.to_vec(),
-                engine: Engine::Other,
-                ships_dlss: route == Route::OptiScaler,
-                dlss_version: None,
-                has_dlss5_model: false,
-                anti_cheat: None,
-                foreign_reshade: false,
-                foreign_optiscaler: false,
-            }),
-            status: GameStatus::Ready {
-                route,
-                reason: String::new(),
-            },
-            cover: None,
-            hidden: false,
-        }
-    }
+    #[test]
+    fn preview_is_exact_when_ready_and_a_sketch_with_blocker_otherwise() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (store, components) = fake_store(&tmp.path().join("store"));
+        let game_dir = tmp.path().join("game");
+        std::fs::create_dir_all(&game_dir).unwrap();
+        let game = game(&game_dir, &[GraphicsApi::Dx12], Route::OptiScaler, true);
 
-    fn names(changes: &[PlannedChange]) -> Vec<String> {
-        changes
+        let settings = settings_with_user_files(tmp.path());
+        let exact = preview(&Inputs {
+            game: &game,
+            store: &store,
+            components: &components,
+            settings: &settings,
+        });
+        assert!(exact.exact && exact.blocker.is_none());
+        assert!(exact
+            .changes
             .iter()
-            .map(|c| c.path.file_name().unwrap().to_string_lossy().to_string())
-            .collect()
-    }
+            .any(|c| c.path.ends_with("libxess.dll")));
 
-    #[test]
-    fn optiscaler_takes_the_first_free_slot_and_backs_up_an_occupied_one() {
-        let tmp = tempfile::tempdir().unwrap();
-        let g = game(tmp.path(), &[GraphicsApi::Dx12], Route::OptiScaler);
-        let plan = preview(&g);
-        assert_eq!(
-            names(&plan),
-            vec![
-                "dxgi.dll",
-                "OptiScaler.ini",
-                "nvngx_dlssnr.dll",
-                "shim.json"
-            ]
-        );
-        assert!(plan.iter().all(|c| c.kind == ChangeKind::Add));
+        let none = Settings::default();
+        let empty = ComponentStore::at(tmp.path().join("empty"));
+        let sketched = preview(&Inputs {
+            game: &game,
+            store: &empty,
+            components: &components,
+            settings: &none,
+        });
+        assert!(!sketched.exact);
+        assert_eq!(sketched.blocker.unwrap().code, "user_file_missing");
+        assert!(sketched
+            .changes
+            .iter()
+            .any(|c| c.path.ends_with("shim.json")));
 
-        std::fs::write(tmp.path().join("dxgi.dll"), b"taken").unwrap();
-        let plan = preview(&g);
-        assert_eq!(names(&plan)[0], "winmm.dll");
-
-        std::fs::write(tmp.path().join("OptiScaler.ini"), b"[old]").unwrap();
-        let plan = preview(&g);
-        assert_eq!(plan[1].kind, ChangeKind::Backup);
-    }
-
-    #[test]
-    fn reshade_routes_list_their_addons() {
-        let tmp = tempfile::tempdir().unwrap();
-        let dx = preview(&game(
-            tmp.path(),
-            &[GraphicsApi::Dx11],
-            Route::ReShadeRenoDx,
-        ));
-        assert_eq!(
-            names(&dx),
-            vec![
-                "dxgi.dll",
-                "ReShade.ini",
-                "renodx-dlss5.addon64",
-                "dlss5-feed.addon64",
-                "nvngx_dlssnr.dll",
-                "shim.json"
-            ]
-        );
-        let vk = preview(&game(
-            tmp.path(),
-            &[GraphicsApi::Vulkan],
-            Route::ReShadeVulkan,
-        ));
-        assert_eq!(names(&vk)[0], "ReShade64.dll");
-        assert!(!names(&vk).iter().any(|n| n.starts_with("renodx")));
-    }
-
-    #[test]
-    fn games_without_a_route_have_an_empty_preview() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut g = game(tmp.path(), &[GraphicsApi::Dx9], Route::OptiScaler);
-        g.status = GameStatus::Unsupported { reason: "x".into() };
-        assert!(preview(&g).is_empty());
-        g.status = GameStatus::Pending;
-        assert!(preview(&g).is_empty());
+        let mut unsupported = game.clone();
+        unsupported.status = GameStatus::Unsupported { reason: "x".into() };
+        assert!(sketch(&unsupported).is_empty());
     }
 }

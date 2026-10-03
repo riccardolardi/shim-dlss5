@@ -21,3 +21,4 @@ serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tauri-plugin-dialog = "2.8.1"

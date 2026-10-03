@@ -50,10 +50,11 @@ pub fn decide(a: &Analysis) -> GameStatus {
             Route::OptiScaler,
             "Vulkan game that ships DLSS, so OptiScaler takes over the DLSS slot.".into(),
         ),
-        (None, true, false) => ready(
-            Route::ReShadeVulkan,
-            "Vulkan game without DLSS, so ReShade adds the DLSS 5 pass.".into(),
-        ),
+        // ReShade's Vulkan path is a machine-wide layer registered in the
+        // registry, which a per-game file journal cannot undo cleanly.
+        (None, true, false) => GameStatus::Unsupported {
+            reason: "Vulkan game without DLSS (arrives in Phase 3)".into(),
+        },
         (None, false, _) => GameStatus::Unsupported {
             reason: match a.apis.first() {
                 Some(GraphicsApi::Dx9) => "DirectX 9 game".into(),
@@ -129,7 +130,7 @@ mod tests {
             (&[Dx12, Vulkan], false, Some(Route::ReShadeRenoDx)),
             (&[Dx11], false, Some(Route::ReShadeRenoDx)),
             (&[Vulkan], true, Some(Route::OptiScaler)),
-            (&[Vulkan], false, Some(Route::ReShadeVulkan)),
+            (&[Vulkan], false, None),
             (&[Dx9], false, None),
             (&[Dx10], true, None),
             (&[OpenGl], false, None),

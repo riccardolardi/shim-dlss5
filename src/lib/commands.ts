@@ -7,9 +7,15 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { AppInfo } from "@/lib/generated/AppInfo";
 import type { Settings } from "@/lib/generated/Settings";
 import type { Library } from "@/lib/generated/Library";
+import type { Game } from "@/lib/generated/Game";
 import type { ScanReport } from "@/lib/generated/ScanReport";
 import type { ScanProgress } from "@/lib/generated/ScanProgress";
-import type { PlannedChange } from "@/lib/generated/PlannedChange";
+import type { Preview } from "@/lib/generated/Preview";
+import type { InstallManifest } from "@/lib/generated/InstallManifest";
+import type { ComponentRow } from "@/lib/generated/ComponentRow";
+import type { ComponentProgress } from "@/lib/generated/ComponentProgress";
+import type { InstallProgress } from "@/lib/generated/InstallProgress";
+import type { FileInfo } from "@/lib/generated/FileInfo";
 import type { ErrorDto } from "@/lib/generated/ErrorDto";
 
 export const commands = {
@@ -18,13 +24,24 @@ export const commands = {
   saveSettings: (settings: Settings) => invoke<Settings>("save_settings", { settings }),
   getLibrary: () => invoke<Library>("get_library"),
   scanLibrary: () => invoke<ScanReport>("scan_library"),
-  planPreview: (gameId: string) => invoke<PlannedChange[]>("plan_preview", { gameId }),
+  planPreview: (gameId: string) => invoke<Preview>("plan_preview", { gameId }),
+  getInstall: (gameId: string) => invoke<InstallManifest | null>("get_install", { gameId }),
+  getComponents: () => invoke<ComponentRow[]>("get_components"),
+  fetchComponent: (id: string) => invoke<ComponentRow>("fetch_component", { id }),
+  inspectFile: (path: string) => invoke<FileInfo>("inspect_file", { path }),
+  installGame: (gameId: string, confirmAntiCheat: boolean) =>
+    invoke<Game>("install_game", { gameId, confirmAntiCheat }),
+  removeGame: (gameId: string) => invoke<Game>("remove_game", { gameId }),
 };
 
 export const events = {
   /** Fires while `scan_library` runs. Returns the unsubscribe function. */
   onScanProgress: (handler: (p: ScanProgress) => void): Promise<UnlistenFn> =>
     listen<ScanProgress>("scan://progress", (e) => handler(e.payload)),
+  onComponentProgress: (handler: (p: ComponentProgress) => void): Promise<UnlistenFn> =>
+    listen<ComponentProgress>("component://progress", (e) => handler(e.payload)),
+  onInstallProgress: (handler: (p: InstallProgress) => void): Promise<UnlistenFn> =>
+    listen<InstallProgress>("install://progress", (e) => handler(e.payload)),
 };
 
 export function isErrorDto(e: unknown): e is ErrorDto {
