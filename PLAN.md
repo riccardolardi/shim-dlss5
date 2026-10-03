@@ -493,13 +493,15 @@ green on the next push.
   do not use `export_to` per type. `u64` exports as `bigint`; annotate
   `#[ts(type = "number | null")]` on timestamps. Bindings are committed and CI
   diffs them.
-- **Vite 8 / rolldown lockfile**: the native binding is an optional dep per OS. A
-  lockfile made on one OS omits the others' bindings, so `npm ci` (and even
-  `npm install`, which trusts the lock) fails elsewhere (npm/cli#4828). Fix in
-  place: `package.json` declares `@rolldown/binding-linux-x64-gnu`,
-  `-win32-x64-msvc` and `-wasm32-wasi` as `optionalDependencies` at rolldown's
-  exact version, so the lockfile carries resolved entries for all of them. When
-  bumping vite/rolldown, bump these three to the new rolldown version.
+- **Native-binding lockfile trap (npm/cli#4828)**: rolldown (vite 8), lightningcss and
+  `@tailwindcss/oxide` (Tailwind 4) and `@tauri-apps/cli` each ship their native code
+  as per-platform optional packages. A lockfile generated on one OS has resolved
+  entries only for that OS, so `npm ci` (and `npm install`, which trusts the lock)
+  fails everywhere else. Fix in place: `package.json` declares the `linux-x64-gnu`
+  and `win32-x64-msvc` variants of all four (plus rolldown's `wasm32-wasi` fallback)
+  as root `optionalDependencies` at the exact versions the lock resolves, and pins
+  `lightningcss` via `overrides` so there is one version. When bumping vite,
+  tailwind or the tauri cli, bump the matching binding versions in the same change.
 - **Tauri CI order**: `tauri::generate_context!` embeds `../dist` at compile time,
   so `npm run build` must run before any `cargo` step that compiles `src-tauri`.
 - **zustand selectors** must return stable references. `useApp(s => s.x ?? [])`
