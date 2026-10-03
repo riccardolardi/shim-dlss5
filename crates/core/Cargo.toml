@@ -1,0 +1,18 @@
+[package]
+name = "shim-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Platform-independent core of shim: models, settings, library, planning."
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+ts-rs.workspace = true
+directories.workspace = true
+tracing.workspace = true
+sha2 = "0.11"
+
+[dev-dependencies]
+tempfile = "3"

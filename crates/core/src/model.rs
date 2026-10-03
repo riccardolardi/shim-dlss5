@@ -1,0 +1,158 @@
+//! Domain types shared between the core, the Tauri layer and the front end.
+//!
+//! Every public type here is exported to TypeScript by `ts-rs` when the core
+//! tests run (`cargo test -p shim-core`). The generated files land in
+//! `src/lib/generated/` and are committed.
+
+use std::path::PathBuf;
+
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum Launcher {
+    Steam,
+    Epic,
+    Gog,
+    Xbox,
+    Ubisoft,
+    Ea,
+    Custom,
+}
+
+impl Launcher {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Steam => "Steam",
+            Self::Epic => "Epic Games",
+            Self::Gog => "GOG",
+            Self::Xbox => "Xbox",
+            Self::Ubisoft => "Ubisoft Connect",
+            Self::Ea => "EA app",
+            Self::Custom => "Custom folder",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum GraphicsApi {
+    Dx9,
+    Dx10,
+    Dx11,
+    Dx12,
+    Vulkan,
+    OpenGl,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum Bitness {
+    X86,
+    X64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum AntiCheat {
+    EasyAntiCheat,
+    BattlEye,
+    Vanguard,
+    Ricochet,
+    GameGuard,
+    Xigncode,
+    Javelin,
+    Ace,
+    Mhyprot,
+    Vac,
+    Other,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum Route {
+    /// Game ships DLSS: OptiScaler as a proxy DLL plus the model.
+    #[serde(rename = "optiscaler")]
+    OptiScaler,
+    /// No DLSS, DX11/DX12: ReShade + RenoDX DLSS 5 add-on + Feeder + model.
+    #[serde(rename = "reshade_renodx")]
+    ReShadeRenoDx,
+    /// No DLSS, Vulkan: ReShade (vulkan) + Feeder + model.
+    #[serde(rename = "reshade_vulkan")]
+    ReShadeVulkan,
+}
+
+/// What the Library card says under the title.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[ts(export)]
+pub enum GameStatus {
+    /// Scanned, nothing installed, a route exists.
+    Ready {
+        route: Route,
+    },
+    Installed {
+        route: Route,
+    },
+    UpdateAvailable {
+        route: Route,
+    },
+    AntiCheat {
+        which: AntiCheat,
+    },
+    Unsupported {
+        reason: String,
+    },
+    /// Discovered but not analysed yet.
+    Pending,
+}
+
+/// What a launcher adapter hands back before analysis.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct DiscoveredGame {
+    pub launcher: Launcher,
+    pub title: String,
+    pub install_dir: PathBuf,
+    /// Executable the launcher declares, if any. Verified later by analysis.
+    pub declared_exe: Option<PathBuf>,
+    /// Launcher-native id, e.g. the Steam app id. Informational.
+    pub launcher_id: Option<String>,
+}
+
+/// Facts read from the game folder and executable.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Analysis {
+    pub exe: PathBuf,
+    pub bitness: Bitness,
+    pub apis: Vec<GraphicsApi>,
+    pub ships_dlss: bool,
+    pub dlss_version: Option<String>,
+    pub has_dlss5_model: bool,
+    pub anti_cheat: Option<AntiCheat>,
+    pub foreign_reshade: bool,
+    pub foreign_optiscaler: bool,
+}
+
+/// A game in the library.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Game {
+    /// `sha256(normalised install_dir)`, stable across runs.
+    pub id: String,
+    pub launcher: Launcher,
+    pub title: String,
+    pub install_dir: PathBuf,
+    pub launcher_id: Option<String>,
+    pub analysis: Option<Analysis>,
+    pub status: GameStatus,
+    pub cover: Option<PathBuf>,
+    pub hidden: bool,
+}

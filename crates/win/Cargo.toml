@@ -1,0 +1,13 @@
+[package]
+name = "shim-win"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Windows implementations of the shim platform traits."
+
+[dependencies]
+shim-core = { path = "../core" }
+tracing.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56"
