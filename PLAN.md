@@ -672,6 +672,12 @@ green on the next push.
   on Windows) with `features = ["blocking"]` is enough and smaller.
 - **Parallel tests sharing a temp path**: two tests building a fake zip at the same
   `%TEMP%` name raced. Build fixtures inside the test's own tempdir.
+- **Windows paths on Unix CI**: the core is tested on macOS/Linux too, where
+  `Path::is_absolute("D:\\x")` is false, `file_name()` does not split on `\`, and
+  `join` inserts `/`. Paths that come from launcher records are Windows paths by
+  nature: use `discovery::{is_windows_absolute, last_segment, win_join}` on them,
+  never `Path` semantics. This had the Unix CI jobs red from Phase 1 to Phase 3
+  while the Windows job was green; always check *all* CI jobs (`gh run list`).
 
 ### 12.5 Review items deliberately deferred
 
