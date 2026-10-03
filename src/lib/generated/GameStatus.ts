@@ -5,4 +5,4 @@ import type { Route } from "./Route";
 /**
  * What the Library card says under the title.
  */
-export type GameStatus = { "kind": "ready", route: Route, } | { "kind": "installed", route: Route, } | { "kind": "update_available", route: Route, } | { "kind": "anti_cheat", which: AntiCheat, } | { "kind": "unsupported", reason: string, } | { "kind": "pending" };
+export type GameStatus = { "kind": "ready", route: Route, reason: string, } | { "kind": "installed", route: Route, } | { "kind": "update_available", route: Route, } | { "kind": "anti_cheat", which: AntiCheat, } | { "kind": "unsupported", reason: string, } | { "kind": "pending" };

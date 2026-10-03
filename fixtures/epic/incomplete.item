@@ -1,0 +1,14 @@
+{
+	"FormatVersion": 0,
+	"bIsIncompleteInstall": true,
+	"LaunchExecutable": "Game.exe",
+	"bIsApplication": true,
+	"bIsExecutable": true,
+	"AppCategories": [ "public", "games", "applications" ],
+	"DisplayName": "Half Downloaded",
+	"InstallLocation": "D:\\Epic Games\\HalfDownloaded",
+	"CatalogNamespace": "x",
+	"CatalogItemId": "x",
+	"AppName": "HalfDownloaded",
+	"MainGameAppName": "HalfDownloaded"
+}

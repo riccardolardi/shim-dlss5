@@ -3,8 +3,9 @@
  * state with new objects.
  */
 import { create } from "zustand";
-import { commands, toErrorDto } from "@/lib/commands";
+import { commands, events, toErrorDto } from "@/lib/commands";
 import type { AppInfo } from "@/lib/generated/AppInfo";
+import type { ScanProgress } from "@/lib/generated/ScanProgress";
 import type { Settings } from "@/lib/generated/Settings";
 import type { Library } from "@/lib/generated/Library";
 import type { DiscoveryOutcome } from "@/lib/generated/DiscoveryOutcome";
@@ -22,6 +23,7 @@ interface AppState {
   settings: Settings | null;
   library: Library;
   scanning: boolean;
+  scanProgress: ScanProgress | null;
   lastScan: DiscoveryOutcome | null;
   scanError: ErrorDto | null;
   bootError: ErrorDto | null;
@@ -40,6 +42,7 @@ export const useApp = create<AppState>((set, get) => ({
   settings: null,
   library: emptyLibrary,
   scanning: false,
+  scanProgress: null,
   lastScan: null,
   scanError: null,
   bootError: null,
@@ -61,12 +64,18 @@ export const useApp = create<AppState>((set, get) => ({
 
   scan: async () => {
     if (get().scanning) return;
-    set({ scanning: true, scanError: null });
+    set({ scanning: true, scanError: null, scanProgress: null });
+    const unlisten = await events
+      .onScanProgress((scanProgress) => set({ scanProgress }))
+      .catch(() => null);
     try {
       const report = await commands.scanLibrary();
-      set({ library: report.library, lastScan: report.outcome, scanning: false });
+      set({ library: report.library, lastScan: report.outcome });
     } catch (e) {
-      set({ scanning: false, scanError: toErrorDto(e) });
+      set({ scanError: toErrorDto(e) });
+    } finally {
+      unlisten?.();
+      set({ scanning: false, scanProgress: null });
     }
   },
 

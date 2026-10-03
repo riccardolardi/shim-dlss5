@@ -1,0 +1,6 @@
+# Tooling (ts-rs, cargo fmt, prettier) writes LF; keep the working tree LF on
+# Windows too so generated files never show up as modified.
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.icns binary

@@ -14,7 +14,7 @@ pub trait Registry: Send + Sync {
     fn subkeys(&self, hive: Hive, key: &str) -> Vec<String>;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Hive {
     CurrentUser,
     LocalMachine,
@@ -62,6 +62,58 @@ impl Platform {
         Self {
             registry: Box::new(Unavailable),
             signatures: Box::new(Unavailable),
+        }
+    }
+}
+
+/// Fakes shared by the adapter tests.
+#[cfg(test)]
+pub mod testing {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    /// An in-memory registry. Keys compare case-insensitively like the real one.
+    #[derive(Default)]
+    pub struct FakeRegistry {
+        values: BTreeMap<(Hive, String), BTreeMap<String, String>>,
+    }
+
+    impl FakeRegistry {
+        pub fn add(&mut self, hive: Hive, key: &str, values: &[(&str, &str)]) {
+            let entry = self.values.entry((hive, key.to_lowercase())).or_default();
+            for (name, value) in values {
+                entry.insert(name.to_lowercase(), value.to_string());
+            }
+        }
+
+        pub fn with_platform(self) -> Platform {
+            Platform {
+                registry: Box::new(self),
+                signatures: Box::new(Unavailable),
+            }
+        }
+    }
+
+    impl Registry for FakeRegistry {
+        fn read_string(&self, hive: Hive, key: &str, value: &str) -> Option<String> {
+            self.values
+                .get(&(hive, key.to_lowercase()))?
+                .get(&value.to_lowercase())
+                .cloned()
+        }
+
+        fn subkeys(&self, hive: Hive, key: &str) -> Vec<String> {
+            let prefix = format!("{}\\", key.to_lowercase());
+            let mut out: Vec<String> = self
+                .values
+                .keys()
+                .filter(|(h, k)| *h == hive && k.starts_with(&prefix))
+                .filter_map(|(_, k)| k[prefix.len()..].split('\\').next())
+                .map(str::to_string)
+                .collect();
+            out.sort();
+            out.dedup();
+            out
         }
     }
 }

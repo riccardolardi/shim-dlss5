@@ -392,7 +392,7 @@ with quarantine, typed errors), Windows glue crate, design tokens, light/dark sh
 the three screens as empty states, generated TS bindings, CI on Windows. Runs on macOS
 with scanning disabled.
 
-**Phase 1 — See (week 2)**
+**Phase 1 — See (week 2)** ✅ done 2026-10-03 (core smoke-tested on real Steam games; the built app launches on Windows — click Scan once in `npm run tauri dev` to see it end to end)
 Steam/Epic/GOG adapters, exe resolution, PE analysis, anti-cheat detection, Library
 grid with real status lines, Game screen with badges and the routing sentence.
 No writing to game folders yet. "What will change" shows the plan.
@@ -425,11 +425,47 @@ redistributable upstream exists, more translations.
 
 ---
 
-## 12. Handoff (written 2026-10-03, end of Phase 0 on macOS)
+## 12. Handoff (written 2026-10-03, end of Phase 0 on macOS; updated the same day after Phase 1 on Windows)
 
-Read this first if you are picking the project up on the Windows PC.
+Read this first if you are picking the project up.
 
-### 12.1 Where things stand
+### 12.0 Phase 1 on the Windows PC (2026-10-03)
+
+- Toolchain installed via winget: Rustup (stable MSVC), Node 24 LTS, VS Build Tools
+  2022 with the C++ workload and Windows SDK 10.0.26100. `npm install` on Windows
+  added every platform's optional native bindings to `package-lock.json` (542 lines,
+  all additions); that is the lockfile the plan wanted, so keep it.
+- `.gitattributes` forces `eol=lf`; the PC has `core.autocrlf=true` and without it
+  every ts-rs output showed as modified.
+- Core: 103 Rust tests, 15 front-end tests, clippy `-D warnings` on the whole
+  workspace and `tsc` clean. Phase 1 code (all in `crates/core/src`):
+  - `discovery/{vdf,steam,epic,gog}.rs` — own ~150-line VDF parser (no crate),
+    Steam via registry + `libraryfolders.vdf` + ACF, Epic `.item` JSON, GOG registry.
+    GOG and Steam read the registry through the `Registry` trait and are tested
+    with `platform::testing::FakeRegistry`. Fixtures in `fixtures/{steam,epic}`.
+  - `analysis/{walk,pe,apis,dlss,anticheat,exe_resolver,mod}.rs` — one bounded
+    folder walk per game (`WALK_DEPTH = 9`, Unreal keeps DLSS nine levels down),
+    hand-rolled PE header/section reader (no goblin), import-string API scan over
+    `.rdata/.idata/.data`, DLSS/Streamline/model presence with version from
+    `VS_FIXEDFILEINFO` in `.rsrc`, foreign ReShade/OptiScaler via strings in proxy
+    DLLs, anti-cheat markers, deterministic exe scoring, engine guess. Analysis is
+    cached by exe size+mtime (`analyse_cached`).
+  - `routing/mod.rs` — PLAN §5.4 as a pure function, `GameStatus::Ready` now carries
+    the `reason` sentence. Foreign ReShade/OptiScaler → `Unsupported` for now.
+  - `install/mod.rs` — planner **preview only** (`PlannedChange {kind, path, note}`),
+    no file ops yet.
+  - `scan.rs` — discover → merge → analyse → route, with a progress callback.
+- Tauri: `scan_library` runs in `spawn_blocking` and emits `scan://progress`
+  (`ScanProgress`); new command `plan_preview(game_id)`. Front end shows progress in
+  the Library header; the Game page shows fact badges, the route sentence, and the
+  planned file list; Install button is present but disabled.
+- Smoke test against the real machine: `cargo run -p shim-win --example scan`
+  (writes nothing). Found 4 Steam games in ~3 s: Assetto Corsa Rally, Bodycam and
+  STALKER 2 → OptiScaler (ship DLSS, versions read), MSFS 2024 → Unsupported because
+  the user's own ReShade is installed. Epic and GOG are not installed on this PC, so
+  those adapters are only fixture-tested.
+
+### 12.1 Where things stand (end of Phase 0)
 
 - Repo: `git@github.com:riccardolardi/shim-dlss5.git`, branch `main`. Product name
   **shim**; crates `shim-core`, `shim-win`, Tauri crate/exe `shim`. Local folder on
@@ -511,6 +547,18 @@ green on the next push.
   every file we add (manifests especially).
 - Release builds have no console (`windows_subsystem = "windows"`); the file log
   and the fatal `MessageBoxW` are the only visible output.
+- **Walk depth**: Unreal games keep `nvngx_dlss.dll` under
+  `Engine/Plugins/Marketplace/DLSS/Binaries/ThirdParty/Win64/` (9 levels). A depth
+  of 6 missed STALKER 2's DLSS and routed it wrong. `WALK_DEPTH` is 9; the walk
+  still takes well under a second per game because junk folders are skipped.
+- **Unity detection**: "any folder ending in `_Data`" is too loose (MSFS 2024 has one
+  deep in its content). Only the exe's own `<Name>_Data` or `UnityPlayer.dll` count.
+- **Test PE files**: `pe::testing::build_pe` aligns sections to 512 bytes, so a test
+  that wants the file size to change must add more than 512 bytes.
+- **Git Bash heredocs** on this PC collapse `\\` to `\` even when quoted. Write
+  fixtures with Windows paths via the Write tool or PowerShell.
+- `git status` lies about generated files when `core.autocrlf` is on; trust
+  `git diff --stat`. `.gitattributes` now pins LF.
 
 ### 12.5 Review items deliberately deferred
 
@@ -524,12 +572,40 @@ From the Phase 0 code review, not yet done:
 - `opener:default` capability covers URLs only; "Open folder" needs
   `opener:allow-open-path` with a scope when implemented.
 - Commands are sync except `save_settings`/`scan_library`; move real I/O to
-  `tauri::async_runtime::spawn_blocking`.
+  `tauri::async_runtime::spawn_blocking`. (`scan_library` done in Phase 1.)
 
-### 12.6 Phase 1, concrete order of work
+Added after Phase 1:
 
-Goal: Library shows real games with real status lines; Game page shows badges and
-the routing sentence; nothing is written to game folders.
+- `Analysis.dlss_version` reads `nvngx_dlss.dll` only; Streamline-only games
+  (`sl.*.dll` + `nvngx_dlssg.dll`) report `ships_dlss` without a version.
+- Foreign ReShade/OptiScaler currently yields `Unsupported`. Phase 2 must tell our
+  own installs apart (the `shim.json` sidecar) before Installed/UpdateAvailable can
+  be derived, and should offer "take over" for a foreign ReShade behind Advanced.
+- `GameStatus::Installed`/`UpdateAvailable` are never produced yet.
+- Game page "Open folder" is still disabled (needs `opener:allow-open-path`).
+- Exe scoring ignores the version-resource description (`FileDescription`); add it
+  if a real library produces a wrong pick. ACR, Bodycam, STALKER 2, MSFS 2024 are
+  all right today.
+- The Game page's `relative()` helper lives in `screens/Game.tsx`; move to `lib/` when
+  a second screen needs it.
+
+### 12.6 Phase 1, concrete order of work — ✅ all seven steps done 2026-10-03
+
+Next up, Phase 2 (install), in this order:
+
+1. `components/` — `components.json` schema, fetch with pinned SHA-256, extract,
+   store under `components\<id>\<version>\`; Components screen rows become real.
+2. `install/planner.rs` — turn `PlannedChange` into `FileOp`s (`Write`, `Backup`,
+   `Delete`, `EditIni`); `journal.rs` with rollback tested by injecting a failure at
+   every op; `manifest.rs` (`installs\<game_id>.json` + `shim.json` sidecar).
+3. Derive `Installed`/`UpdateAvailable` from the manifest in `scan::analyse_game`;
+   stop treating our own proxy DLL as foreign.
+4. Model picker on the Components screen (`Settings.model_path`, hash, Authenticode
+   via `shim-win`), then enable the Install button.
+
+Original Phase 1 goal, kept for reference: Library shows real games with real status
+lines; Game page shows badges and the routing sentence; nothing is written to game
+folders.
 
 1. **Fixtures**: `fixtures/games/<case>/...` with tiny fake exes (hand-built PE
    headers are enough for bitness and import-string scans), DLSS dlls, anti-cheat

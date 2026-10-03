@@ -12,7 +12,17 @@ import { t } from "@/i18n";
 const filters: Filter[] = ["all", "installed", "update", "anti_cheat", "unsupported"];
 
 export function Library() {
-  const { library, scanning, scan, lastScan, scanError, info, go } = useApp();
+  const { library, scanning, scanProgress, scan, lastScan, scanError, info, go } = useApp();
+
+  const progressText = !scanning
+    ? null
+    : scanProgress && scanProgress.total > 0 && scanProgress.title
+      ? t("library.progress.analysing", {
+          done: scanProgress.done + 1,
+          total: scanProgress.total,
+          title: scanProgress.title,
+        })
+      : t("library.progress.discovering");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -30,10 +40,11 @@ export function Library() {
   return (
     <div className="px-8 py-6">
       <PageHeader title={t("library.title")}>
-        <span className="text-xs text-text-3">
-          {library.scanned_at
-            ? t("library.lastScan", { time: new Date(library.scanned_at * 1000).toLocaleString() })
-            : t("library.neverScanned")}
+        <span className="max-w-xs truncate text-xs text-text-3" aria-live="polite">
+          {progressText ??
+            (library.scanned_at
+              ? t("library.lastScan", { time: new Date(library.scanned_at * 1000).toLocaleString() })
+              : t("library.neverScanned"))}
         </span>
         <Button variant="primary" onClick={() => void scan()} disabled={scanning || !canScan}>
           <RefreshCw size={14} className={scanning ? "animate-spin" : ""} aria-hidden />

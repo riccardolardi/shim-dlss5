@@ -26,3 +26,13 @@ pub struct ScanReport {
     pub library: Library,
     pub outcome: DiscoveryOutcome,
 }
+
+/// Emitted as the `scan://progress` event while a scan runs. `total` is 0
+/// until discovery has finished; `title` is the game being analysed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct ScanProgress {
+    pub done: usize,
+    pub total: usize,
+    pub title: Option<String>,
+}

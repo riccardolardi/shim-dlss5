@@ -1,0 +1,16 @@
+{
+	"FormatVersion": 0,
+	"bIsIncompleteInstall": false,
+	"LaunchExecutable": "",
+	"bIsApplication": false,
+	"bIsExecutable": false,
+	"AppCategories": [ "public", "addons", "applications" ],
+	"DisplayName": "Control - Expansion Pass",
+	"InstallLocation": "D:\\Epic Games\\Control",
+	"CatalogNamespace": "calluna",
+	"CatalogItemId": "fedcba9876543210fedcba9876543210",
+	"AppName": "CallunaExpansion",
+	"MainGameCatalogNamespace": "calluna",
+	"MainGameCatalogItemId": "0123456789abcdef0123456789abcdef",
+	"MainGameAppName": "Calluna"
+}

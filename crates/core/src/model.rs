@@ -73,6 +73,17 @@ pub enum AntiCheat {
     Other,
 }
 
+/// Informational engine guess from the folder layout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum Engine {
+    Unreal,
+    Unity,
+    RedEngine,
+    Other,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
@@ -93,9 +104,11 @@ pub enum Route {
 #[serde(tag = "kind", rename_all = "snake_case")]
 #[ts(export)]
 pub enum GameStatus {
-    /// Scanned, nothing installed, a route exists.
+    /// Scanned, nothing installed, a route exists. `reason` is the one
+    /// sentence the Game screen shows for why this route was chosen.
     Ready {
         route: Route,
+        reason: String,
     },
     Installed {
         route: Route,
@@ -131,8 +144,14 @@ pub struct DiscoveredGame {
 #[ts(export)]
 pub struct Analysis {
     pub exe: PathBuf,
+    /// Size and mtime of `exe` when analysed; a changed pair invalidates the cache.
+    #[ts(type = "number")]
+    pub exe_size: u64,
+    #[ts(type = "number")]
+    pub exe_mtime: u64,
     pub bitness: Bitness,
     pub apis: Vec<GraphicsApi>,
+    pub engine: Engine,
     pub ships_dlss: bool,
     pub dlss_version: Option<String>,
     pub has_dlss5_model: bool,

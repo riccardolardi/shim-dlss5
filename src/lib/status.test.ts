@@ -23,7 +23,7 @@ describe("statusLine", () => {
 describe("matchesFilter", () => {
   it("counts update-available as installed", () => {
     expect(matchesFilter({ kind: "update_available", route: "optiscaler" }, "installed")).toBe(true);
-    expect(matchesFilter({ kind: "ready", route: "optiscaler" }, "installed")).toBe(false);
+    expect(matchesFilter({ kind: "ready", route: "optiscaler", reason: "" }, "installed")).toBe(false);
   });
 
   it("all matches everything", () => {

@@ -1,12 +1,15 @@
 /**
- * Typed wrappers around every Tauri command. The only file that imports
- * `invoke`, so the command surface is visible in one place.
+ * Typed wrappers around every Tauri command and event. The only file that
+ * imports `invoke`/`listen`, so the command surface is visible in one place.
  */
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { AppInfo } from "@/lib/generated/AppInfo";
 import type { Settings } from "@/lib/generated/Settings";
 import type { Library } from "@/lib/generated/Library";
 import type { ScanReport } from "@/lib/generated/ScanReport";
+import type { ScanProgress } from "@/lib/generated/ScanProgress";
+import type { PlannedChange } from "@/lib/generated/PlannedChange";
 import type { ErrorDto } from "@/lib/generated/ErrorDto";
 
 export const commands = {
@@ -15,6 +18,13 @@ export const commands = {
   saveSettings: (settings: Settings) => invoke<Settings>("save_settings", { settings }),
   getLibrary: () => invoke<Library>("get_library"),
   scanLibrary: () => invoke<ScanReport>("scan_library"),
+  planPreview: (gameId: string) => invoke<PlannedChange[]>("plan_preview", { gameId }),
+};
+
+export const events = {
+  /** Fires while `scan_library` runs. Returns the unsubscribe function. */
+  onScanProgress: (handler: (p: ScanProgress) => void): Promise<UnlistenFn> =>
+    listen<ScanProgress>("scan://progress", (e) => handler(e.payload)),
 };
 
 export function isErrorDto(e: unknown): e is ErrorDto {

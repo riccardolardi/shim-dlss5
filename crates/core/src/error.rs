@@ -35,6 +35,12 @@ pub enum Error {
 
     #[error("launcher adapter {adapter} failed: {detail}")]
     Adapter { adapter: String, detail: String },
+
+    #[error("no executable found under {install_dir}")]
+    NoExecutable { install_dir: PathBuf },
+
+    #[error("{path} is not a Windows executable: {detail}")]
+    NotAnExecutable { path: PathBuf, detail: String },
 }
 
 impl Error {
@@ -67,6 +73,8 @@ impl Error {
             Self::NoDataDir => "no_data_dir",
             Self::UnsupportedPlatform { .. } => "unsupported_platform",
             Self::Adapter { .. } => "adapter",
+            Self::NoExecutable { .. } => "no_executable",
+            Self::NotAnExecutable { .. } => "not_an_executable",
         }
     }
 
@@ -85,6 +93,12 @@ impl Error {
             }
             Self::Adapter { adapter, .. } => {
                 format!("Scanning {adapter} failed. Other sources were still scanned.")
+            }
+            Self::NoExecutable { install_dir } => {
+                format!("No game executable was found in {}.", install_dir.display())
+            }
+            Self::NotAnExecutable { path, .. } => {
+                format!("{} is not a Windows executable.", path.display())
             }
         }
     }
