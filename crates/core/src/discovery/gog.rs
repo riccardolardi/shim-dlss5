@@ -48,7 +48,9 @@ fn read_product(registry: &dyn Registry, id: &str) -> Option<DiscoveredGame> {
     }
     let title = read("gameName")?;
     let install_dir = PathBuf::from(read("path")?);
-    let declared_exe = read("exe").map(PathBuf::from).filter(|p| p.is_absolute());
+    let declared_exe = read("exe")
+        .filter(|s| crate::discovery::is_windows_absolute(s))
+        .map(PathBuf::from);
     Some(DiscoveredGame {
         launcher: Launcher::Gog,
         title,

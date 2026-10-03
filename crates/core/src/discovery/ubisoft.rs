@@ -60,9 +60,7 @@ pub fn discover_from(registry: &dyn Registry) -> Vec<DiscoveredGame> {
 }
 
 pub(crate) fn folder_name(dir: &Path) -> String {
-    dir.file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| dir.display().to_string())
+    crate::discovery::last_segment(&dir.to_string_lossy())
 }
 
 #[cfg(test)]

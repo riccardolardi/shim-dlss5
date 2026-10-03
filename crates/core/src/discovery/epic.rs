@@ -117,7 +117,7 @@ pub fn parse_item(text: &str) -> std::result::Result<Option<DiscoveredGame>, ser
     }
     let install_dir = PathBuf::from(&item.install_location);
     let declared_exe = (!item.launch_executable.is_empty())
-        .then(|| install_dir.join(item.launch_executable.replace('/', "\\")));
+        .then(|| crate::discovery::win_join(&item.install_location, &item.launch_executable));
     Ok(Some(DiscoveredGame {
         launcher: Launcher::Epic,
         title: item.display_name,

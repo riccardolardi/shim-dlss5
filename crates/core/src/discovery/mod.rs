@@ -88,6 +88,34 @@ fn enabled_launchers(s: &ScanSources) -> Vec<Launcher> {
         .collect()
 }
 
+/// `C:\...`, `C:/...` or `\\server\...`. `Path::is_absolute` says no to these
+/// on macOS/Linux, where the core is also tested.
+pub(crate) fn is_windows_absolute(s: &str) -> bool {
+    let b = s.as_bytes();
+    (b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && (b[2] == b'\\' || b[2] == b'/'))
+        || s.starts_with("\\\\")
+}
+
+/// Last path segment, splitting on either separator, so a Windows path read
+/// from the registry gives the same answer on every OS.
+pub(crate) fn last_segment(path: &str) -> String {
+    path.trim_end_matches(['\\', '/'])
+        .rsplit(['\\', '/'])
+        .next()
+        .unwrap_or(path)
+        .to_string()
+}
+
+/// `base\rel` with backslashes, for paths that are Windows paths by nature
+/// (they came from a launcher's own records) whatever the host OS.
+pub(crate) fn win_join(base: &str, rel: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(format!(
+        "{}\\{}",
+        base.trim_end_matches(['\\', '/']),
+        rel.replace('/', "\\").trim_start_matches('\\')
+    ))
+}
+
 /// First adapter wins when two launchers report the same folder.
 fn dedupe_by_install_dir(games: Vec<DiscoveredGame>) -> Vec<DiscoveredGame> {
     let mut seen = std::collections::HashSet::new();
@@ -146,6 +174,20 @@ mod tests {
             declared_exe: None,
             launcher_id: None,
         }
+    }
+
+    #[test]
+    fn windows_path_helpers_work_on_every_host() {
+        assert!(is_windows_absolute(r"D:\Games\X"));
+        assert!(is_windows_absolute("c:/games/x"));
+        assert!(is_windows_absolute(r"\\nas\games"));
+        assert!(!is_windows_absolute("relative/x.exe"));
+        assert_eq!(last_segment(r"D:\Ubisoft\Far Cry 6\"), "Far Cry 6");
+        assert_eq!(last_segment("D:/Ubisoft/Far Cry 6"), "Far Cry 6");
+        assert_eq!(
+            win_join(r"D:\Epic Games\Control\", "Binaries/Win64/Control_DX12.exe"),
+            PathBuf::from(r"D:\Epic Games\Control\Binaries\Win64\Control_DX12.exe")
+        );
     }
 
     #[test]
