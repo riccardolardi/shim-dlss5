@@ -439,10 +439,9 @@ Read this first if you are picking the project up on the Windows PC.
   `<data dir>/logs/shim.log`. Scanning is disabled off-Windows and the UI says so.
 - Data dir: `%LOCALAPPDATA%\shim` (override with `SHIM_DATA_DIR`).
 - Test counts at handoff: 45 Rust (core), 13 front end. clippy `-D warnings`,
-  rustfmt and `tsc` are clean. CI: core jobs green on Linux/macOS; the Front end
-  and Windows jobs failed once on the rolldown native-binding lockfile problem
-  (see 12.4); the fix is in the same commit as this section. Check the Actions
-  tab for the first fully green run before trusting the Windows job.
+  rustfmt and `tsc` are clean. CI is fully green (core on Linux and macOS, front
+  end, and the Windows app job, which compiles the Tauri app with MSVC and uploads
+  `shim.exe` as an artifact). It took three lockfile fixes to get there; see 12.4.
 - Nothing has been written into a game folder yet. There is no install code.
 
 ### 12.2 How to get going on Windows
