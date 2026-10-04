@@ -117,6 +117,7 @@ mod tests {
             exe: PathBuf::from("g.exe"),
             exe_size: 1,
             exe_mtime: 1,
+            version: 0,
             bitness: Bitness::X64,
             apis: apis.to_vec(),
             engine: Engine::Other,

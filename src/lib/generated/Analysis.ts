@@ -11,4 +11,9 @@ export type Analysis = { exe: string,
 /**
  * Size and mtime of `exe` when analysed; a changed pair invalidates the cache.
  */
-exe_size: number, exe_mtime: number, bitness: Bitness, apis: Array<GraphicsApi>, engine: Engine, ships_dlss: boolean, dlss_version: string | null, has_dlss5_model: boolean, anti_cheat: AntiCheat | null, foreign_reshade: boolean, foreign_optiscaler: boolean, };
+exe_size: number, exe_mtime: number, 
+/**
+ * `analysis::ANALYSIS_VERSION` at the time; an older number means the
+ * detection rules changed since and the game is analysed again.
+ */
+version: number, bitness: Bitness, apis: Array<GraphicsApi>, engine: Engine, ships_dlss: boolean, dlss_version: string | null, has_dlss5_model: boolean, anti_cheat: AntiCheat | null, foreign_reshade: boolean, foreign_optiscaler: boolean, };

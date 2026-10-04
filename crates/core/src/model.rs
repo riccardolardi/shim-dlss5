@@ -173,6 +173,10 @@ pub struct Analysis {
     pub exe_size: u64,
     #[ts(type = "number")]
     pub exe_mtime: u64,
+    /// `analysis::ANALYSIS_VERSION` at the time; an older number means the
+    /// detection rules changed since and the game is analysed again.
+    #[serde(default)]
+    pub version: u32,
     pub bitness: Bitness,
     pub apis: Vec<GraphicsApi>,
     pub engine: Engine,

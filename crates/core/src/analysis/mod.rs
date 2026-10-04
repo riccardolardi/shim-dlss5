@@ -20,6 +20,11 @@ use crate::{
 /// `Engine/Plugins/Marketplace/DLSS/Binaries/ThirdParty/Win64/`, nine levels down.
 pub const WALK_DEPTH: usize = 9;
 
+/// Bump whenever detection rules change, so cached analyses from older
+/// builds are redone on the next scan instead of trusted.
+/// 2: logs and shader packs no longer count as a foreign ReShade/OptiScaler.
+pub const ANALYSIS_VERSION: u32 = 2;
+
 /// Analyse a game folder from scratch.
 pub fn analyse(game: &DiscoveredGame) -> Result<Analysis> {
     let tree = walk::Tree::collect(&game.install_dir, WALK_DEPTH);
@@ -46,6 +51,7 @@ fn analyse_exe(tree: &walk::Tree, exe: &Path, title: &str) -> Result<Analysis> {
         exe: exe.to_path_buf(),
         exe_size,
         exe_mtime,
+        version: ANALYSIS_VERSION,
         bitness,
         apis: apis::detect(&bytes),
         engine: exe_resolver::engine(tree, exe),
@@ -61,7 +67,10 @@ fn analyse_exe(tree: &walk::Tree, exe: &Path, title: &str) -> Result<Analysis> {
 /// Reuse `previous` when its executable is unchanged, otherwise re-analyse.
 pub fn analyse_cached(game: &DiscoveredGame, previous: Option<&Analysis>) -> Result<Analysis> {
     if let Some(prev) = previous {
-        if prev.exe.is_file() && fingerprint(&prev.exe) == (prev.exe_size, prev.exe_mtime) {
+        if prev.version == ANALYSIS_VERSION
+            && prev.exe.is_file()
+            && fingerprint(&prev.exe) == (prev.exe_size, prev.exe_mtime)
+        {
             return Ok(prev.clone());
         }
     }
@@ -179,8 +188,20 @@ mod tests {
 
         let gone = Analysis {
             exe: PathBuf::from("Z:/nope.exe"),
-            ..stale
+            ..stale.clone()
         };
         assert_eq!(analyse_cached(&g, Some(&gone)).unwrap().apis, fresh.apis);
+
+        // A cache written by an older build's rules is not trusted either.
+        let old_rules = Analysis {
+            version: ANALYSIS_VERSION - 1,
+            ..fresh.clone()
+        };
+        let mut poisoned = old_rules.clone();
+        poisoned.apis = vec![GraphicsApi::OpenGl];
+        assert_eq!(
+            analyse_cached(&g, Some(&poisoned)).unwrap().apis,
+            fresh.apis
+        );
     }
 }
