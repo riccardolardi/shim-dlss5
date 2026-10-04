@@ -11,7 +11,7 @@ import type { Theme } from "@/lib/generated/Theme";
 import type { ScanSources } from "@/lib/generated/ScanSources";
 import { t } from "@/i18n";
 
-const REPO_URL = "https://github.com/riccardolardi/shim-dlss5";
+import { REPO_URL, SPONSOR_URL } from "@/lib/links";
 
 const sources: (keyof Omit<ScanSources, "custom_folders">)[] = [
   "steam",
@@ -164,6 +164,17 @@ export function Settings() {
                 {REPO_URL.replace("https://", "")}
               </button>
               <span className="text-text-3"> · {t("settings.about.license")}</span>
+            </dd>
+            <dt className="text-text-2">{t("support.label")}</dt>
+            <dd>
+              <button
+                type="button"
+                onClick={() => void openUrl(SPONSOR_URL)}
+                className="text-accent underline-offset-2 hover:underline"
+              >
+                {SPONSOR_URL.replace("https://", "")}
+              </button>
+              <span className="block text-xs text-text-3">{t("support.hint")}</span>
             </dd>
           </dl>
         </Section>

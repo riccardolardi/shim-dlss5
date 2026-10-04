@@ -1,5 +1,7 @@
-import { Gamepad2, Package, Settings as SettingsIcon } from "lucide-react";
+import { Gamepad2, Heart, Package, Settings as SettingsIcon } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useApp, type Screen } from "@/store/app";
+import { SPONSOR_URL } from "@/lib/links";
 import { t } from "@/i18n";
 
 const items: { screen: Screen; label: "nav.library" | "nav.components" | "nav.settings"; Icon: typeof Gamepad2 }[] = [
@@ -46,7 +48,18 @@ export function Rail() {
         })}
       </ul>
 
-      <div className="mt-auto px-2 text-xs text-text-3">{version ? `v${version}` : ""}</div>
+      <div className="mt-auto flex flex-col gap-3">
+        <button
+          type="button"
+          onClick={() => void openUrl(SPONSOR_URL)}
+          className="flex items-center gap-2.5 rounded-md border border-border px-2.5 py-2 text-left text-sm text-text-2 transition-colors hover:border-accent hover:text-text"
+          title={t("support.hint")}
+        >
+          <Heart size={16} strokeWidth={1.75} className="text-accent" aria-hidden />
+          {t("support.label")}
+        </button>
+        <div className="px-2 text-xs text-text-3">{version ? `v${version}` : ""}</div>
+      </div>
     </nav>
   );
 }

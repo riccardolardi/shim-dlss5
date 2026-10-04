@@ -162,6 +162,11 @@
   "launcher.ea": "EA app",
   "launcher.custom": "Custom folder",
 
+  "support.label": "Support shim",
+  "support.hint": "shim is free and bundles nothing. If it saved you an evening, a coffee keeps it going.",
+  "support.afterInstall": "Worked for you? shim is free; a coffee helps.",
+  "support.coffee": "Buy a coffee",
+
   "error.details": "Show details",
   "error.hide": "Hide details"
 }

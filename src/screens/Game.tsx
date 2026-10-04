@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { SPONSOR_URL } from "@/lib/links";
 import { Button } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNote } from "@/components/ErrorNote";
@@ -311,7 +313,13 @@ function AdvancedSection({ game, locked }: { game: GameModel; locked: boolean })
 function Outcome({ outcome }: { outcome: NonNullable<ReturnType<typeof useApp.getState>["installOutcome"][string]> }) {
   switch (outcome.kind) {
     case "installed":
-      return <p className="text-sm text-success">{t("game.installDone", { n: outcome.files })}</p>;
+      return (
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm text-success">{t("game.installDone", { n: outcome.files })}</p>
+          <span className="text-xs text-text-3">{t("support.afterInstall")}</span>
+          <Button onClick={() => void openUrl(SPONSOR_URL)}>{t("support.coffee")}</Button>
+        </div>
+      );
     case "removed":
       return <p className="text-sm text-success">{t("game.removeDone")}</p>;
     case "failed":
