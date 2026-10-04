@@ -54,7 +54,7 @@ impl LauncherAdapter for Steam {
     }
 }
 
-fn steam_path(platform: &Platform) -> Option<PathBuf> {
+pub fn steam_path(platform: &Platform) -> Option<PathBuf> {
     platform
         .registry
         .read_string(Hive::CurrentUser, r"Software\Valve\Steam", "SteamPath")

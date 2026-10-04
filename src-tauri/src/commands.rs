@@ -339,12 +339,13 @@ pub async fn fetch_covers(app: AppHandle) -> CmdResult<Library> {
         let state = app.state::<AppState>();
         let games = state.library.lock().map_err(poisoned)?.games.clone();
         let covers_dir = state.paths.covers_dir();
+        let steam_root = shim_core::discovery::steam::steam_path(&state.platform);
         let mut updated = Vec::with_capacity(games.len());
         for game in games {
             let game = if game.cover.as_ref().is_some_and(|c| c.is_file()) {
                 game
             } else {
-                match shim_core::artwork::fetch_cover(&covers_dir, &game) {
+                match shim_core::artwork::fetch_cover(&covers_dir, &game, steam_root.as_deref()) {
                     Ok(Some(path)) => {
                         emit_event(
                             &app,
