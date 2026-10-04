@@ -391,6 +391,9 @@ pub const FORK_INI_KEYS: &[(&str, &str, &str)] = &[
     ("DlssNr", "Enabled", "true"),
     ("DlssNr", "RunBeforeSR", "true"),
     ("DlssNr", "AutoCapture", "false"),
+    // The fork ships silent; a log beside the exe is what every report needs.
+    ("Log", "LogToFile", "true"),
+    ("Log", "LogLevel", "2"),
 ];
 
 pub fn enable_dlssnr(ini: &str) -> String {
