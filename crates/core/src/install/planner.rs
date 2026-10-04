@@ -352,31 +352,58 @@ fn plan_optiscaler(
     Ok(())
 }
 
-/// Set `Enabled=true` inside the `[DlssNr]` section; the fork ships it off.
-/// Anything else in the file is left byte-for-byte as shipped.
+/// Keys we set inside `[DlssNr]`. The fork ships the pass off; we switch it
+/// on at half model resolution (the frame itself is not reduced; cost and
+/// VRAM fall with the square) and without the per-session frame capture.
+/// A 12 GB card running MSFS 2024 at 4K hung the GPU at full resolution.
+pub const DLSSNR_KEYS: &[(&str, &str)] = &[
+    ("Enabled", "true"),
+    ("WorkingScale", "0.5"),
+    ("AutoCapture", "false"),
+];
+
+/// Apply [`DLSSNR_KEYS`] inside the `[DlssNr]` section. Anything else in the
+/// file is left byte-for-byte as shipped; missing keys are appended.
 pub fn enable_dlssnr(ini: &str) -> String {
-    let mut out = String::with_capacity(ini.len() + 16);
+    let mut out = String::with_capacity(ini.len() + 64);
     let mut in_section = false;
-    let mut done = false;
+    let mut done = [false; DLSSNR_KEYS.len()];
     for line in ini.split_inclusive('\n') {
         let trimmed = line.trim_end_matches(['\r', '\n']);
         if trimmed.starts_with('[') {
             in_section = trimmed.eq_ignore_ascii_case("[DlssNr]");
         }
-        if in_section && !done && trimmed.trim_start().starts_with("Enabled=") {
-            let eol = &line[trimmed.len()..];
-            out.push_str("Enabled=true");
-            out.push_str(eol);
-            done = true;
-            continue;
+        if in_section {
+            let key = trimmed.trim_start().split('=').next().unwrap_or("");
+            if let Some(i) = DLSSNR_KEYS.iter().position(|(k, _)| *k == key) {
+                if !done[i] {
+                    out.push_str(&format!(
+                        "{}={}{}",
+                        key,
+                        DLSSNR_KEYS[i].1,
+                        &line[trimmed.len()..]
+                    ));
+                    done[i] = true;
+                    continue;
+                }
+            }
         }
         out.push_str(line);
     }
-    if !done {
+    let missing: Vec<String> = DLSSNR_KEYS
+        .iter()
+        .zip(done)
+        .filter(|(_, d)| !d)
+        .map(|((k, v), _)| format!("{k}={v}\r\n"))
+        .collect();
+    if !missing.is_empty() {
         if !out.ends_with('\n') && !out.is_empty() {
             out.push_str("\r\n");
         }
-        out.push_str("[DlssNr]\r\nEnabled=true\r\n");
+        if !done[0] {
+            out.push_str("[DlssNr]\r\n");
+        }
+        out.extend(missing);
     }
     out
 }
@@ -773,14 +800,22 @@ mod tests {
     }
 
     #[test]
-    fn enable_dlssnr_only_touches_that_key() {
+    fn enable_dlssnr_only_touches_its_keys_in_its_section() {
         assert_eq!(
-            enable_dlssnr("[A]\r\nEnabled=auto\r\n[DlssNr]\r\nEnabled=auto\r\nX=1\r\n"),
-            "[A]\r\nEnabled=auto\r\n[DlssNr]\r\nEnabled=true\r\nX=1\r\n"
+            enable_dlssnr(
+                "[A]\r\nEnabled=auto\r\nWorkingScale=auto\r\n[DlssNr]\r\nEnabled=auto\r\nX=1\r\nWorkingScale=auto\r\nAutoCapture=auto\r\n"
+            ),
+            "[A]\r\nEnabled=auto\r\nWorkingScale=auto\r\n[DlssNr]\r\nEnabled=true\r\nX=1\r\nWorkingScale=0.5\r\nAutoCapture=false\r\n"
         );
+        // Section missing entirely: appended whole.
         assert_eq!(
             enable_dlssnr("[A]\nEnabled=auto\n"),
-            "[A]\nEnabled=auto\n[DlssNr]\r\nEnabled=true\r\n"
+            "[A]\nEnabled=auto\n[DlssNr]\r\nEnabled=true\r\nWorkingScale=0.5\r\nAutoCapture=false\r\n"
+        );
+        // Section present but a key missing: only that key is appended.
+        assert_eq!(
+            enable_dlssnr("[DlssNr]\r\nEnabled=auto\r\n"),
+            "[DlssNr]\r\nEnabled=true\r\nWorkingScale=0.5\r\nAutoCapture=false\r\n"
         );
     }
 
