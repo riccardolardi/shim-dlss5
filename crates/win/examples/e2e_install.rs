@@ -36,7 +36,7 @@ fn main() {
     for c in &components.components {
         let alias = match c.id.as_str() {
             "optiscaler" => "optiscaler.7z",
-            "optiscaler-dlssnr" => "optiscaler-dlssnr.zip",
+            "optiscaler-nr" => "optiscaler-nr.zip",
             "reshade" => "reshade_setup.exe",
             _ => "feeder.zip",
         };

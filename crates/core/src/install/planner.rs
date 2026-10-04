@@ -159,7 +159,7 @@ pub fn plan(inputs: &Inputs<'_>) -> Result<Plan> {
         Route::OptiScalerDlssNr => {
             plan_optiscaler(
                 inputs,
-                "optiscaler-dlssnr",
+                "optiscaler-nr",
                 &exe_dir,
                 &analysis.apis,
                 true,
@@ -353,12 +353,13 @@ fn plan_optiscaler(
 }
 
 /// Keys we set inside `[DlssNr]`. The fork ships the pass off; we switch it
-/// on at half model resolution (the frame itself is not reduced; cost and
-/// VRAM fall with the square) and without the per-session frame capture.
-/// A 12 GB card running MSFS 2024 at 4K hung the GPU at full resolution.
+/// on *before* the upscaler (`RunBeforeSR`), so the model works at the game's
+/// render resolution rather than the output: the cheaper placement, and the
+/// one a 12 GB card can afford (MSFS 2024 at 4K hung the GPU with the pass
+/// after upscaling at full resolution). Frame capture is off.
 pub const DLSSNR_KEYS: &[(&str, &str)] = &[
     ("Enabled", "true"),
-    ("WorkingScale", "0.5"),
+    ("RunBeforeSR", "true"),
     ("AutoCapture", "false"),
 ];
 
@@ -521,7 +522,7 @@ pub mod testing {
         );
         let fork = fake_component(
             &store,
-            "optiscaler-dlssnr",
+            "optiscaler-nr",
             &[
                 ("OptiScaler.dll", b"opti-nr"),
                 ("OptiScaler.ini", FORK_INI.as_bytes()),
@@ -762,7 +763,7 @@ mod tests {
             ini.contains("Dx12Upscaler=auto"),
             "other sections untouched"
         );
-        assert_eq!(plan.components[0].id, "optiscaler-dlssnr");
+        assert_eq!(plan.components[0].id, "optiscaler-nr");
         assert!(plan.model_sha256.is_some());
         assert!(plan.user_files.is_empty());
 
@@ -803,19 +804,19 @@ mod tests {
     fn enable_dlssnr_only_touches_its_keys_in_its_section() {
         assert_eq!(
             enable_dlssnr(
-                "[A]\r\nEnabled=auto\r\nWorkingScale=auto\r\n[DlssNr]\r\nEnabled=auto\r\nX=1\r\nWorkingScale=auto\r\nAutoCapture=auto\r\n"
+                "[A]\r\nEnabled=auto\r\nWorkingScale=auto\r\n[DlssNr]\r\nEnabled=auto\r\nX=1\r\nRunBeforeSR=auto\r\nAutoCapture=auto\r\n"
             ),
-            "[A]\r\nEnabled=auto\r\nWorkingScale=auto\r\n[DlssNr]\r\nEnabled=true\r\nX=1\r\nWorkingScale=0.5\r\nAutoCapture=false\r\n"
+            "[A]\r\nEnabled=auto\r\nWorkingScale=auto\r\n[DlssNr]\r\nEnabled=true\r\nX=1\r\nRunBeforeSR=true\r\nAutoCapture=false\r\n"
         );
         // Section missing entirely: appended whole.
         assert_eq!(
             enable_dlssnr("[A]\nEnabled=auto\n"),
-            "[A]\nEnabled=auto\n[DlssNr]\r\nEnabled=true\r\nWorkingScale=0.5\r\nAutoCapture=false\r\n"
+            "[A]\nEnabled=auto\n[DlssNr]\r\nEnabled=true\r\nRunBeforeSR=true\r\nAutoCapture=false\r\n"
         );
         // Section present but a key missing: only that key is appended.
         assert_eq!(
             enable_dlssnr("[DlssNr]\r\nEnabled=auto\r\n"),
-            "[DlssNr]\r\nEnabled=true\r\nWorkingScale=0.5\r\nAutoCapture=false\r\n"
+            "[DlssNr]\r\nEnabled=true\r\nRunBeforeSR=true\r\nAutoCapture=false\r\n"
         );
     }
 

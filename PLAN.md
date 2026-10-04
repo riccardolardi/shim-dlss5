@@ -590,6 +590,20 @@ never loads the model. The §5.4 table and §5.5 routes are superseded by this:
 | No DLSS, DX11/DX12 | `ReShadeFeeder`: the above + DLSS5-Feeder + preset + user's `nvngx_dlss.dll` | none |
 | Vulkan | Unsupported (Phase 3) | |
 
+**2026-10-04 update — fork swapped.** The first MSFS 2024 run of the fork mode on
+the dev PC (RTX 5070, 12 GB) hung the GPU: the pass ran after upscaling at full
+4K on top of MSFS + frame generation, VRAM spilled to ~50 GB, `0x887A0005`.
+Dagherbou's build only runs post-upscale. The "OptiScaler + DLSS 5" mode now uses
+**wilsjo2's OptiScaler-DLSSNR-PreSR-Multipass 0.8.3** (GPL-3, GitHub releases
+with `.sha256` sidecars, built on Dagherbou's, RTX 20–50): shim writes
+`[DlssNr] Enabled=true, RunBeforeSR=true, AutoCapture=false`, so the model runs
+on the render-resolution frame before the upscaler — the cheaper placement the
+user asked for. Its `INSTALL-DLSSNR.md` lists two known model hashes (NVIDIA
+signed `E16BCF15…` for RTX 50; ShortFuse compatibility `E67DEE20…` for RTX
+20/30/40); the dev PC's model (`8270b350…`) is neither but was accepted by
+Dagherbou's build ("custom runtime accepted"). Old `optiscaler-dlssnr` records
+read as *Update available* (component gone from the manifest).
+
 `InstallMode { Dlss5, OptiScalerDlss5, OptiScalerOnly }` lives on `Game.mode`
 (library.json, carried through merges), set by `set_game_mode`, refused while
 installed. The fork's own README: RTX 50 only, game must already use DLSS, DX12

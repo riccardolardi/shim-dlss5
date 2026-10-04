@@ -32,17 +32,17 @@
       "summary": "ReShade add-on that feeds depth and motion vectors to the DLSS 5 add-on in games without DLSS."
     },
     {
-      "id": "optiscaler-dlssnr",
-      "name": "OptiScaler DLSS-NR fork",
+      "id": "optiscaler-nr",
+      "name": "OptiScaler + DLSS NR (pre-SR fork)",
       "license": "GPL-3.0",
-      "publisher": "https://github.com/Dagherbou/OptiScaler_DLSSNR",
-      "version": "0.2.0",
-      "asset": "https://github.com/Dagherbou/OptiScaler_DLSSNR/releases/download/v0.2.0-dlssnr/OptiScaler-DLSSNR-v0.2.0.zip",
-      "sha256": "8eece7a4d7de6de5917f0c99ac60540b2d77022e7699bba717b0a6d9e1829bce",
-      "size": 130486024,
+      "publisher": "https://github.com/wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass",
+      "version": "0.8.3",
+      "asset": "https://github.com/wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass/releases/download/v0.8.3/OptiScaler-NR-v0.8.3.zip",
+      "sha256": "3f2d26fb136d964a394bf50896d082156173153a2a55b88e1995277b4dabe3c8",
+      "size": 131392750,
       "archive": "zip",
-      "extract": { "strip": ["Licenses/", "!! EXTRACT", "setup_linux.sh", "setup_windows.bat"], "only": [] },
-      "summary": "OptiScaler with the DLSS 5 neural pass built in: upscales, then runs your model on its own output. Optional mode for games that ship DLSS (RTX 50)."
+      "extract": { "strip": ["docs/", "images/", "Licenses/", "tests/", "OptiScaler/dlssnr/", "!!", "Config.md", "CONTRIBUTING.md", "Features.md", "INSTALL-DLSSNR.md", "LICENSE", "README.md", "Spoofing.md", "SHA256SUMS.txt", "setup_linux.sh", "setup_windows.bat"], "only": [] },
+      "summary": "OptiScaler with the DLSS 5 neural pass built in, run before the upscaler at render resolution (cheaper). Built on Dagherbou's fork; RTX 20 to 50. Optional mode for games that ship DLSS."
     },
     {
       "id": "optiscaler",

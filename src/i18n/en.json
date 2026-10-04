@@ -92,7 +92,7 @@
   "game.mode.dlss5": "DLSS 5 only",
   "game.mode.dlss5Hint": "ReShade hosts the RenoDX DLSS 5 add-on over the game's own DLSS. Default; what the known-working setups use.",
   "game.mode.optiscaler_dlss5": "OptiScaler + DLSS 5",
-  "game.mode.optiscaler_dlss5Hint": "The OptiScaler DLSS-NR fork: OptiScaler's upscaler, then the DLSS 5 model on its output. One DLL, no ReShade. RTX 50 only.",
+  "game.mode.optiscaler_dlss5Hint": "wilsjo2's OptiScaler fork with the DLSS 5 model built in, run before the upscaler at render resolution (cheaper than on the full output). One DLL, no ReShade. RTX 20 to 50.",
   "game.mode.optiscaler_only": "OptiScaler only",
   "game.mode.optiscaler_onlyHint": "Upstream OptiScaler: swaps DLSS for another upscaler. No DLSS 5 pass; your model is not used.",
   "game.elevate": "Restart as administrator",
