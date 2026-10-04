@@ -352,59 +352,96 @@ fn plan_optiscaler(
     Ok(())
 }
 
-/// Keys we set inside `[DlssNr]`. The fork ships the pass off; we switch it
-/// on *before* the upscaler (`RunBeforeSR`), so the model works at the game's
-/// render resolution rather than the output: the cheaper placement, and the
-/// one a 12 GB card can afford (MSFS 2024 at 4K hung the GPU with the pass
-/// after upscaling at full resolution). Frame capture is off.
-pub const DLSSNR_KEYS: &[(&str, &str)] = &[
-    ("Enabled", "true"),
-    ("RunBeforeSR", "true"),
-    ("AutoCapture", "false"),
+/// `(section, key, value)` we set in the fork's ini. Keep DLSS as the
+/// upscaler (the fork's `auto` would swap it for XeSS on DX12), switch the
+/// neural pass on *before* the upscaler (`RunBeforeSR`) so the model works at
+/// the game's render resolution rather than the output — the cheaper
+/// placement, and the one a 12 GB card can afford (MSFS 2024 at 4K hung the
+/// GPU with the pass after upscaling at full resolution) — and leave the
+/// per-session frame capture off.
+pub const FORK_INI_KEYS: &[(&str, &str, &str)] = &[
+    ("Upscalers", "Dx12Upscaler", "dlss"),
+    ("Upscalers", "Dx11Upscaler", "dlss"),
+    ("DlssNr", "Enabled", "true"),
+    ("DlssNr", "RunBeforeSR", "true"),
+    ("DlssNr", "AutoCapture", "false"),
 ];
 
-/// Apply [`DLSSNR_KEYS`] inside the `[DlssNr]` section. Anything else in the
-/// file is left byte-for-byte as shipped; missing keys are appended.
 pub fn enable_dlssnr(ini: &str) -> String {
-    let mut out = String::with_capacity(ini.len() + 64);
-    let mut in_section = false;
-    let mut done = [false; DLSSNR_KEYS.len()];
+    patch_ini(ini, FORK_INI_KEYS)
+}
+
+/// Set `key=value` under `[section]` for each entry. Existing lines are
+/// rewritten in place (comments and everything else stay byte-for-byte);
+/// a key the section lacks is inserted right under the section header; a
+/// section the file lacks is appended at the end. Line endings follow the file.
+pub fn patch_ini(ini: &str, keys: &[(&str, &str, &str)]) -> String {
+    let header = |s: &str| format!("[{s}]");
+    let nl = if ini.contains("\r\n") { "\r\n" } else { "\n" };
+
+    // Pass 1: which keys already exist in their section.
+    let mut present = vec![false; keys.len()];
+    let mut section = String::new();
+    for line in ini.lines() {
+        let t = line.trim();
+        if t.starts_with('[') {
+            section = t.to_string();
+            continue;
+        }
+        let k = t.split('=').next().unwrap_or("").trim();
+        for (i, (s, key, _)) in keys.iter().enumerate() {
+            if section.eq_ignore_ascii_case(&header(s)) && k == *key {
+                present[i] = true;
+            }
+        }
+    }
+
+    // Pass 2: rewrite.
+    let mut out = String::with_capacity(ini.len() + 128);
+    let mut section = String::new();
     for line in ini.split_inclusive('\n') {
         let trimmed = line.trim_end_matches(['\r', '\n']);
-        if trimmed.starts_with('[') {
-            in_section = trimmed.eq_ignore_ascii_case("[DlssNr]");
-        }
-        if in_section {
-            let key = trimmed.trim_start().split('=').next().unwrap_or("");
-            if let Some(i) = DLSSNR_KEYS.iter().position(|(k, _)| *k == key) {
-                if !done[i] {
-                    out.push_str(&format!(
-                        "{}={}{}",
-                        key,
-                        DLSSNR_KEYS[i].1,
-                        &line[trimmed.len()..]
-                    ));
-                    done[i] = true;
-                    continue;
+        let t = trimmed.trim();
+        if t.starts_with('[') {
+            section = t.to_string();
+            out.push_str(line);
+            if !line.ends_with('\n') {
+                out.push_str(nl);
+            }
+            for (i, (s, key, val)) in keys.iter().enumerate() {
+                if !present[i] && section.eq_ignore_ascii_case(&header(s)) {
+                    out.push_str(&format!("{key}={val}{nl}"));
+                    present[i] = true;
                 }
             }
+            continue;
+        }
+        let k = t.split('=').next().unwrap_or("").trim();
+        if let Some((_, _, val)) = keys
+            .iter()
+            .find(|(s, key, _)| section.eq_ignore_ascii_case(&header(s)) && k == *key)
+        {
+            out.push_str(&format!("{k}={val}{}", &line[trimmed.len()..]));
+            continue;
         }
         out.push_str(line);
     }
-    let missing: Vec<String> = DLSSNR_KEYS
-        .iter()
-        .zip(done)
-        .filter(|(_, d)| !d)
-        .map(|((k, v), _)| format!("{k}={v}\r\n"))
-        .collect();
-    if !missing.is_empty() {
-        if !out.ends_with('\n') && !out.is_empty() {
-            out.push_str("\r\n");
+
+    // Sections the file does not have at all.
+    let mut appended: Vec<&str> = Vec::new();
+    for (i, (s, key, val)) in keys.iter().enumerate() {
+        if present[i] {
+            continue;
         }
-        if !done[0] {
-            out.push_str("[DlssNr]\r\n");
+        if !out.is_empty() && !out.ends_with('\n') {
+            out.push_str(nl);
         }
-        out.extend(missing);
+        if !appended.contains(s) {
+            out.push_str(&format!("[{s}]{nl}"));
+            appended.push(s);
+        }
+        out.push_str(&format!("{key}={val}{nl}"));
+        present[i] = true;
     }
     out
 }
@@ -758,10 +795,11 @@ mod tests {
             ]
         );
         let ini = text_of(&plan.ops[1]);
-        assert!(ini.contains("[DlssNr]\r\nToggleKey=auto\r\n; comment\r\nEnabled=true\r\n"));
+        assert!(ini.contains("Enabled=true\r\n") && ini.contains("RunBeforeSR=true\r\n"));
+        assert!(ini.contains("Dx12Upscaler=dlss"));
         assert!(
-            ini.contains("Dx12Upscaler=auto"),
-            "other sections untouched"
+            ini.contains("TransferStrength=auto"),
+            "other keys untouched"
         );
         assert_eq!(plan.components[0].id, "optiscaler-nr");
         assert!(plan.model_sha256.is_some());
@@ -801,22 +839,30 @@ mod tests {
     }
 
     #[test]
-    fn enable_dlssnr_only_touches_its_keys_in_its_section() {
+    fn patch_ini_rewrites_in_place_inserts_under_headers_and_appends_sections() {
+        let keys: &[(&str, &str, &str)] = &[("S", "A", "1"), ("S", "B", "2"), ("T", "C", "3")];
+        // Same key name in another section is untouched; comments survive;
+        // B is missing from [S] and goes right under its header; [T] is new.
         assert_eq!(
-            enable_dlssnr(
-                "[A]\r\nEnabled=auto\r\nWorkingScale=auto\r\n[DlssNr]\r\nEnabled=auto\r\nX=1\r\nRunBeforeSR=auto\r\nAutoCapture=auto\r\n"
-            ),
-            "[A]\r\nEnabled=auto\r\nWorkingScale=auto\r\n[DlssNr]\r\nEnabled=true\r\nX=1\r\nRunBeforeSR=true\r\nAutoCapture=false\r\n"
+            patch_ini("[X]\r\nA=0\r\n[S]\r\n; note\r\nA=0 \r\n", keys),
+            "[X]\r\nA=0\r\n[S]\r\nB=2\r\n; note\r\nA=1\r\n[T]\r\nC=3\r\n"
         );
-        // Section missing entirely: appended whole.
-        assert_eq!(
-            enable_dlssnr("[A]\nEnabled=auto\n"),
-            "[A]\nEnabled=auto\n[DlssNr]\r\nEnabled=true\r\nRunBeforeSR=true\r\nAutoCapture=false\r\n"
-        );
-        // Section present but a key missing: only that key is appended.
-        assert_eq!(
-            enable_dlssnr("[DlssNr]\r\nEnabled=auto\r\n"),
-            "[DlssNr]\r\nEnabled=true\r\nRunBeforeSR=true\r\nAutoCapture=false\r\n"
+        // LF files stay LF; an empty file gets everything appended.
+        assert_eq!(patch_ini("[S]\nA=0\n", &keys[..1]), "[S]\nA=1\n");
+        assert_eq!(patch_ini("", &keys[2..]), "[T]\nC=3\n");
+    }
+
+    #[test]
+    fn fork_ini_keeps_dlss_and_runs_the_pass_before_upscaling() {
+        let out = enable_dlssnr(FORK_INI);
+        assert!(out.contains("[Upscalers]\r\nDx11Upscaler=dlss\r\nDx12Upscaler=dlss\r\n"));
+        assert!(out.contains("Enabled=true\r\n"));
+        assert!(out.contains("RunBeforeSR=true\r\n"));
+        assert!(out.contains("AutoCapture=false\r\n"));
+        assert!(out.contains("; comment\r\n"), "comments untouched");
+        assert!(
+            out.contains("TransferStrength=auto"),
+            "other keys untouched"
         );
     }
 
