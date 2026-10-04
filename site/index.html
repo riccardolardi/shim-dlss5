@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>shim</title>
+<meta name="description" content="shim puts DLSS 5 neural rendering into a game, keeps it current, and takes it out again byte-for-byte. Free, open source, bundles nothing.">
+<meta property="og:title" content="shim — a small, honest DLSS 5 injector">
+<meta property="og:description" content="Scan, open a game, Install. Every file recorded, every overwrite backed up, Remove restores the folder byte-for-byte.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23101612'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%234ade80'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one narrow column of prose (65ch) with full-width "terminal" panels that
+     reproduce what the app itself shows: the sentence, the file list, the log. */
+  :root {
+    --bg: #f6f7f4;
+    --bg-2: #eceeea;
+    --panel: #101612;
+    --panel-fg: #d7e0d9;
+    --panel-dim: #7f8d84;
+    --fg: #141a16;
+    --fg-2: #4d5a52;
+    --fg-3: #7a877f;
+    --line: #d5dad6;
+    --accent: #1f8f4e;
+    --accent-ink: #ffffff;
+    --warn: #b7791f;
+    --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1411; --bg-2: #171e19; --panel: #0a0e0b; --panel-fg: #d7e0d9; --panel-dim: #6f7d74;
+      --fg: #e6ebe7; --fg-2: #a9b4ad; --fg-3: #74817a; --line: #26302a;
+      --accent: #4ade80; --accent-ink: #0b2a17; --warn: #e2b14a; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1411; --bg-2: #171e19; --panel: #0a0e0b; --panel-fg: #d7e0d9; --panel-dim: #6f7d74;
+    --fg: #e6ebe7; --fg-2: #a9b4ad; --fg-3: #74817a; --line: #26302a;
+    --accent: #4ade80; --accent-ink: #0b2a17; --warn: #e2b14a; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px; line-height: 1.55; }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .wrap { max-width: 72rem; margin: 0 auto; padding-inline: 20px; padding-block: 0; }
+  h1, h2, h3 { text-wrap: balance; line-height: 1.15; margin: 0; font-weight: 600; }
+  p { margin: 0; max-width: 65ch; }
+  .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-3); }
+
+  /* Top bar */
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; font-size: 18px; color: var(--fg); text-decoration: none; }
+  .brand i { width: 11px; height: 11px; border-radius: 50%; background: var(--accent); display: inline-block; }
+  .top nav { display: flex; gap: 18px; flex-wrap: wrap; font-size: 14px; }
+  .top nav a { color: var(--fg-2); text-decoration: none; }
+  .top nav a:hover { color: var(--fg); }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding-inline: 18px; border-radius: 8px; font-weight: 500; font-size: 15px; text-decoration: none; border: 1px solid var(--line); color: var(--fg); background: var(--bg-2); white-space: nowrap; }
+  .btn:hover { border-color: var(--fg-3); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .btn.primary:hover { filter: brightness(.95); }
+  .btn .heart { color: var(--accent); }
+  .btn.primary .heart { color: var(--accent-ink); }
+
+  /* Hero */
+  .hero { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 40px; align-items: center; padding-block: 64px 48px; }
+  .hero h1 { font-size: clamp(32px, 4.6vw, 52px); letter-spacing: -.02em; }
+  .hero .lede { font-size: 18px; color: var(--fg-2); margin-top: 18px; }
+  .hero .ctas { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 28px; }
+  .hero .fine { margin-top: 14px; font-size: 13px; color: var(--fg-3); }
+
+  /* Terminal-like panels: what the app shows, verbatim */
+  .panel { background: var(--panel); color: var(--panel-fg); border-radius: 10px; padding: 18px 20px; font-family: var(--font-mono); font-size: 13px; line-height: 1.6; overflow-x: auto; min-width: 0; }
+  .panel .k { color: var(--panel-dim); }
+  .panel .add { color: var(--accent); }
+  .panel .bak { color: var(--warn); }
+  .panel .ok { color: #4ade80; }
+  .panel .err { color: #f87171; }
+  .panel .title { color: #ffffff; font-family: var(--font-body); font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+  .panel .cap { color: var(--panel-dim); font-family: var(--font-body); font-size: 12px; margin-top: 12px; }
+  .panel .badges { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 14px; }
+  .panel .badge { border: 1px solid #2a352e; border-radius: 4px; padding: 1px 7px; font-size: 11px; color: #c6d0c9; font-family: var(--font-body); }
+  .panel .badge.good { border-color: #2f6b47; color: #4ade80; }
+  .panel .row { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); gap: 10px; padding: 5px 0; border-top: 1px solid #1c251f; }
+  .panel .row:first-of-type { border-top: 0; }
+  .panel .note { color: var(--panel-dim); }
+
+  /* Sections */
+  section { padding-block: 56px; border-top: 1px solid var(--line); }
+  section h2 { font-size: clamp(24px, 3vw, 32px); letter-spacing: -.015em; margin-bottom: 8px; }
+  section .sub { color: var(--fg-2); font-size: 17px; margin-bottom: 28px; }
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: start; }
+  .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+  .step { display: grid; gap: 8px; }
+  .step .n { font-family: var(--font-mono); color: var(--accent); font-size: 13px; }
+  .step h3 { font-size: 18px; }
+  .step p { color: var(--fg-2); font-size: 15px; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 15px; }
+  .tablewrap { overflow-x: auto; }
+  th, td { text-align: left; padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; font-size: 13px; color: var(--fg-3); letter-spacing: .04em; text-transform: uppercase; font-family: var(--font-mono); }
+  td code { font-family: var(--font-mono); font-size: 13px; }
+
+  .callout { border-left: 3px solid var(--accent); padding: 4px 0 4px 18px; }
+  .callout p + p { margin-top: 10px; }
+
+  /* Support */
+  .support { background: var(--bg-2); border-radius: 14px; padding: 36px; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 32px; align-items: center; }
+  .support h2 { margin-bottom: 10px; }
+  .support ul { margin: 16px 0 0; padding-left: 18px; color: var(--fg-2); }
+  .support li + li { margin-top: 6px; }
+  .support .box { display: grid; gap: 12px; justify-items: start; }
+  .support .amt { display: flex; gap: 8px; flex-wrap: wrap; }
+  .support .amt span { font-family: var(--font-mono); font-size: 13px; border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; color: var(--fg-2); }
+  .support .fine { font-size: 13px; color: var(--fg-3); }
+
+  /* FAQ */
+  .faq { display: grid; gap: 4px; }
+  details { border-top: 1px solid var(--line); }
+  details:last-child { border-bottom: 1px solid var(--line); }
+  summary { cursor: pointer; padding: 14px 0; font-weight: 500; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
+  summary::after { content: "+"; color: var(--fg-3); font-family: var(--font-mono); }
+  details[open] summary::after { content: "–"; }
+  details p { padding: 0 0 16px; color: var(--fg-2); }
+
+  footer { padding-block: 28px 48px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--fg-3); }
+  footer a { color: var(--fg-2); }
+
+  @media (max-width: 760px) {
+    .hero, .two, .support { grid-template-columns: minmax(0, 1fr); }
+    .steps { grid-template-columns: minmax(0, 1fr); }
+    .hero { padding-block: 40px 32px; }
+    .support { padding: 24px; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .btn { transition: filter .15s ease, border-color .15s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <a class="brand" href="#"><i aria-hidden="true"></i>shim</a>
+    <nav aria-label="Sections">
+      <a href="#how">How it works</a>
+      <a href="#routes">What it installs</a>
+      <a href="#support">Support</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/riccardolardi/shim-dlss5">GitHub</a>
+    </nav>
+  </header>
+
+  <section class="hero" style="border-top:0">
+    <div>
+      <div class="eyebrow">Windows · DirectX 11 / 12 · free and open source</div>
+      <h1 style="margin-top:12px">DLSS 5 in your game. Out again, byte for byte.</h1>
+      <p class="lede">shim scans your Steam, Epic, GOG, Xbox, Ubisoft and EA libraries, tells you in one sentence what it would change, installs the DLSS 5 neural-rendering pass, and can undo every file it touched.</p>
+      <div class="ctas">
+        <a class="btn primary" href="https://github.com/riccardolardi/shim-dlss5/releases/latest">Download for Windows</a>
+        <a class="btn" href="https://github.com/sponsors/riccardolardi"><span class="heart" aria-hidden="true">♥</span> Support shim</a>
+      </div>
+      <p class="fine">Installer and portable exe, 2–7 MB. Hashes in <span class="mono">SHA256SUMS.txt</span>. Not code-signed yet, so SmartScreen will warn once.</p>
+    </div>
+
+    <div class="panel" aria-label="What the app shows for a game">
+      <div class="title">Bright Memory Infinite Ray Tracing Benchmark</div>
+      <div class="badges">
+        <span class="badge">Steam</span><span class="badge good">Ready · DLSS 5 (ReShade + RenoDX)</span><span class="badge">64-bit</span><span class="badge">DX12</span><span class="badge">Unreal</span><span class="badge">Ships DLSS 2.1.28.0</span>
+      </div>
+      <div><span class="k">What shim would do</span></div>
+      <div style="margin:4px 0 14px">DX12 game that ships DLSS: ReShade loads the RenoDX DLSS&nbsp;5 add-on, which takes over the game's own DLSS pass. Turn DLSS on in the game's settings.</div>
+      <div><span class="k">What will change</span></div>
+      <div class="row"><span class="add">Add</span><span>dxgi.dll <span class="note">— ReShade 6.8.0 add-on build, as dxgi.dll</span></span></div>
+      <div class="row"><span class="add">Add</span><span>ReShade.ini <span class="note">— add-ons on, DLSS 5 add-on configured</span></span></div>
+      <div class="row"><span class="add">Add</span><span>renodx-dlss5.addon64 <span class="note">— your RenoDX DLSS 5 add-on</span></span></div>
+      <div class="row"><span class="bak">Replace (backed up)</span><span>nvngx_dlssnr.dll <span class="note">— your DLSS 5 model</span></span></div>
+      <div class="row"><span class="add">Add</span><span>shim.json <span class="note">— install record (lets shim undo everything)</span></span></div>
+      <div class="cap">The sentence and the file list are what the app shows before you click Install.</div>
+    </div>
+  </section>
+
+  <section id="how">
+    <h2>Three clicks</h2>
+    <p class="sub">No countdowns, no modals, no account.</p>
+    <div class="steps">
+      <div class="step"><div class="n">Scan</div><h3>Find your games</h3><p>One pass over the launchers you enable. Each game's executable is read to learn its graphics API, whether it ships DLSS, and whether an anti-cheat is in the folder.</p></div>
+      <div class="step"><div class="n">Open a game</div><h3>Read one sentence</h3><p>shim says which route it would take and why, and lists every file it would add or replace. Nothing runs from that view.</p></div>
+      <div class="step"><div class="n">Install</div><h3>Then play. Or Remove.</h3><p>Every overwritten file is backed up first, every write is recorded before it happens. Remove walks the record backwards and restores the folder byte for byte.</p></div>
+    </div>
+  </section>
+
+  <section id="routes">
+    <h2>What it installs</h2>
+    <p class="sub">Only components fetched from their publishers' own release pages, pinned by version and SHA-256, verified before unpacking, never executed by shim.</p>
+    <div class="two">
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Game</th><th>Route</th></tr></thead>
+          <tbody>
+            <tr><td>Ships DLSS<br><span class="mono" style="font-size:12px;color:var(--fg-3)">DX11 / DX12</span></td><td>ReShade (add-on build) hosting the <strong>RenoDX DLSS 5 add-on</strong> over the game's own DLSS output, plus your model.<br><span style="color:var(--fg-3);font-size:14px">Optional per game: OptiScaler with the pass built in, before or after upscaling (wilsjo2's and Dagherbou's forks), or plain OptiScaler.</span></td></tr>
+            <tr><td>No DLSS<br><span class="mono" style="font-size:12px;color:var(--fg-3)">DX11 / DX12</span></td><td>The same, plus <strong>DLSS5-Feeder</strong> to synthesise depth and motion inputs, and your DLSS runtime.</td></tr>
+            <tr><td>Vulkan, DX9/10, 32-bit</td><td>Not yet.</td></tr>
+            <tr><td>Anti-cheat detected</td><td>Blocked. Installing needs a typed confirmation, and shim says why.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout">
+        <p><strong>You supply the model.</strong> The DLSS 5 model, <span class="mono">nvngx_dlssnr.dll</span>, is an NVIDIA file. shim never downloads, hosts or mirrors it. You point shim at your copy; it shows the file's SHA-256 and whether its NVIDIA signature is intact.</p>
+        <p>The same goes for the RenoDX DLSS 5 add-on, which its authors publish on their Discord, not on a release page.</p>
+        <p>shim bundles nothing and sends nothing. There is no telemetry, no account, no background service.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="two">
+      <div>
+        <h2>It tells you what happened</h2>
+        <p class="sub">After a run, the Game page pulls the decisive lines out of the component's log beside the executable, so a failure is readable without opening a file.</p>
+        <p style="color:var(--fg-2)">That is the block to paste into a bug report for the add-on's authors. A crash in a game is almost never a mystery once those lines are in front of you.</p>
+      </div>
+      <div class="panel" aria-label="Last run readout">
+        <div class="title">Last run</div>
+        <div><span class="ok">The DLSS 5 pass reported no errors.</span> <span class="k">ReShade.log · today 14:41</span></div>
+        <div style="margin-top:10px">INFO | Registered add-on "DLSS 5 Neural Rendering" v0.2026.828.517</div>
+        <div>INFO | DLSS5 Generic: D3D12 NGX hooks installed across 2 module copy(ies)</div>
+        <div>INFO | DLSS5 Generic: signed NR runtime (nvngx_dlssnr.dll) pre-loaded at device init</div>
+        <div>INFO | DLSS5 Generic: NGX feature create intercepted: feature=1 (DLSS/DLAA), slot=0</div>
+        <div class="cap">Real lines from a working install on a 4K flight simulator.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="support">
+    <div class="support">
+      <div>
+        <div class="eyebrow">Free, and staying free</div>
+        <h2 style="margin-top:10px">If it saved you an evening, buy the next one</h2>
+        <p style="color:var(--fg-2)">shim is one person's project. There is no paid tier, no ads, and nothing is gated. Sponsorship pays for the hours that go into:</p>
+        <ul>
+          <li>game reports: reading your logs and fixing the route for that game</li>
+          <li>keeping the pinned components current when ReShade, Feeder and the OptiScaler forks ship</li>
+          <li>the routes still missing: Vulkan, and taking over an existing ReShade install reversibly</li>
+          <li>a code-signing certificate, so Windows stops warning about the installer</li>
+        </ul>
+      </div>
+      <div class="box">
+        <a class="btn primary" href="https://github.com/sponsors/riccardolardi"><span class="heart" aria-hidden="true">♥</span> Sponsor on GitHub</a>
+        <div class="amt"><span>one-time</span><span>monthly</span><span>any amount</span></div>
+        <p class="fine">GitHub Sponsors takes no fee. The link is also the heart in the app's sidebar, and on the result line after an install that worked.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq">
+    <h2>Questions</h2>
+    <p class="sub">The ones that come up.</p>
+    <div class="faq">
+      <details><summary>Will this get me banned in an online game?</summary><p>It can. Injecting a proxy DLL into a game with kernel anti-cheat (Easy Anti-Cheat, BattlEye, Vanguard, Ricochet and others) is exactly what those systems look for. shim detects the markers, blocks the game, and only proceeds after you type a confirmation. Use it in single-player games and benchmarks.</p></details>
+      <details><summary>Windows says the installer is unrecognised.</summary><p>The binaries are not code-signed yet; a certificate is one of the things sponsorship goes towards. Every release publishes <span class="mono">SHA256SUMS.txt</span>. Verify the hash, then choose "Run anyway". The portable exe works the same way without installing.</p></details>
+      <details><summary>Which GPU do I need?</summary><p>An NVIDIA RTX card. Which generations run the neural pass depends on the model build you have: NVIDIA's signed build initialises on RTX 50, community builds cover RTX 20 to 40. The log readout in shim tells you if the model refused your card. Memory matters more than you'd think: a 12 GB card at 4K with frame generation on is already full before the pass starts.</p></details>
+      <details><summary>Where do I get the model and the add-on?</summary><p>Not from shim, and not from this site. The model is an NVIDIA file; the RenoDX DLSS 5 add-on is published on the RenoDX Discord. shim records the hash and signature of whatever you point it at, so you know what you have.</p></details>
+      <details><summary>Does Remove really put everything back?</summary><p>Yes. Every file shim overwrote was copied to a backup first and is copied back; every file it added is deleted; the logs and captures the components wrote while running are removed too, unless they already existed before the install. A journal written before each step means even a crash mid-install is undone at the next start. shim never deletes by file name and never touches a ReShade or OptiScaler install it did not make.</p></details>
+      <details><summary>Is it open source?</summary><p>MIT, on <a href="https://github.com/riccardolardi/shim-dlss5">GitHub</a>. Rust core with 170 tests that run on Windows, macOS and Linux; a Tauri shell; nothing bundled. The components it fetches keep their own licences.</p></details>
+    </div>
+  </section>
+
+  <footer>
+    <span>shim · MIT · not affiliated with NVIDIA, ReShade, RenoDX or OptiScaler</span>
+    <span><a href="https://github.com/riccardolardi/shim-dlss5/releases/latest">Releases</a> · <a href="https://github.com/riccardolardi/shim-dlss5">Source</a> · <a href="https://github.com/sponsors/riccardolardi">Sponsor</a></span>
+  </footer>
+
+</div>
+</body>
+</html>
