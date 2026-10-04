@@ -24,6 +24,7 @@ import type { Preview } from "@/lib/generated/Preview";
 import type { InstallManifest } from "@/lib/generated/InstallManifest";
 import type { ChangeKind } from "@/lib/generated/ChangeKind";
 import type { InstallMode } from "@/lib/generated/InstallMode";
+import type { LastRun } from "@/lib/generated/LastRun";
 import type { ErrorDto } from "@/lib/generated/ErrorDto";
 import { t } from "@/i18n";
 
@@ -92,6 +93,7 @@ export function Game({ id }: { id: string }) {
       <div className="flex flex-col gap-4">
         <RouteSection game={game} />
         {installed ? <InstalledSection game={game} /> : game.status.kind === "ready" && <ChangesSection game={game} />}
+        {installed && <LastRunSection game={game} />}
         {game.analysis?.ships_dlss &&
           (game.analysis.apis.includes("dx12") || game.analysis.apis.includes("dx11")) && (
             <AdvancedSection game={game} locked={installed} />
@@ -270,6 +272,7 @@ const modes: { mode: InstallMode; label: "game.mode.dlss5" | "game.mode.optiscal
 /** Route choice for games that ship DLSS. */
 function AdvancedSection({ game, locked }: { game: GameModel; locked: boolean }) {
   const setMode = useApp((s) => s.setMode);
+  const setNeural = useApp((s) => s.setNeural);
   const [error, setError] = useState<ErrorDto | null>(null);
   const current: InstallMode = game.mode ?? "dlss5";
   return (
@@ -300,11 +303,86 @@ function AdvancedSection({ game, locked }: { game: GameModel; locked: boolean })
           </label>
         ))}
       </div>
+      {current === "opti_scaler_dlss5" && (
+        <div className="mt-4">
+          <div className="mb-2 text-sm font-medium">{t("game.placement.title")}</div>
+          <div className="flex flex-col gap-2" role="radiogroup" aria-label={t("game.placement.title")}>
+            {(
+              [
+                { before: true, label: "game.placement.before", hint: "game.placement.beforeHint" },
+                { before: false, label: "game.placement.after", hint: "game.placement.afterHint" },
+              ] as const
+            ).map((p) => {
+              const selected = (game.neural?.before_upscale ?? true) === p.before;
+              return (
+                <label
+                  key={String(p.before)}
+                  className={[
+                    "flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2",
+                    selected ? "border-accent bg-surface-2" : "border-border",
+                    locked ? "cursor-not-allowed opacity-60" : "",
+                  ].join(" ")}
+                >
+                  <input
+                    type="radio"
+                    name={`placement-${game.id}`}
+                    checked={selected}
+                    disabled={locked}
+                    onChange={() =>
+                      void setNeural(game.id, p.before ? null : { before_upscale: false }).then(setError)
+                    }
+                    className="mt-1"
+                  />
+                  <span>
+                    <span className="block text-sm">{t(p.label)}</span>
+                    <span className="block text-xs text-text-3">{t(p.hint)}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {locked && <p className="mt-2 text-xs text-text-3">{t("game.advanced.locked")}</p>}
       {error && (
         <div className="mt-2">
           <ErrorNote error={error} />
         </div>
+      )}
+    </Section>
+  );
+}
+
+/** What the component log beside the exe said after the last run. */
+function LastRunSection({ game }: { game: GameModel }) {
+  const [run, setRun] = useState<LastRun | null | undefined>(undefined);
+  useEffect(() => {
+    let live = true;
+    commands
+      .lastRun(game.id)
+      .then((r) => live && setRun(r))
+      .catch(() => live && setRun(null));
+    return () => {
+      live = false;
+    };
+  }, [game.id, game.status]);
+  if (run === undefined) return null;
+  return (
+    <Section title={t("game.lastRun.title")} description={t("game.lastRun.body")}>
+      {run === null ? (
+        <p className="text-sm text-text-3">{t("game.lastRun.none")}</p>
+      ) : (
+        <>
+          <p className={`mb-2 text-sm ${run.failed ? "text-danger" : "text-success"}`}>
+            {run.failed ? t("game.lastRun.failed") : t("game.lastRun.ok")}
+            <span className="ml-2 text-xs text-text-3">
+              {relative(game.install_dir, run.log)} · {new Date(run.modified * 1000).toLocaleString()}
+            </span>
+          </p>
+          <pre className="max-h-64 select-text overflow-auto whitespace-pre-wrap rounded-md bg-surface-2 p-3 font-mono text-xs text-text-2">
+            {run.lines.join("\n")}
+          </pre>
+        </>
       )}
     </Section>
   );

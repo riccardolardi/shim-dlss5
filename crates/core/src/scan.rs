@@ -238,6 +238,7 @@ mod tests {
             cover: None,
             hidden: false,
             mode: None,
+            neural: None,
         };
         let plain = analyse_game(&game, &paths, &components);
         assert!(matches!(plain.status, GameStatus::Unsupported { .. }));

@@ -33,6 +33,8 @@ pub fn run() {
             commands::install_game,
             commands::remove_game,
             commands::set_game_mode,
+            commands::set_neural_options,
+            commands::last_run,
             commands::rescan_game,
             commands::open_folder,
             commands::fetch_covers,

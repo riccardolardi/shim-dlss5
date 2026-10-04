@@ -135,6 +135,7 @@ mod tests {
             cover: None,
             hidden: false,
             mode: None,
+            neural: None,
         }
     }
 

@@ -71,6 +71,20 @@ pub struct ComponentProgress {
     pub expected: u64,
 }
 
+/// The decisive lines from the component log beside a game's exe
+/// (`OptiScaler.log` or `ReShade.log`) after its last run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct LastRun {
+    pub log: String,
+    /// Unix seconds of the log's last modification.
+    #[ts(type = "number")]
+    pub modified: u64,
+    pub lines: Vec<String>,
+    /// True when an error line was among them.
+    pub failed: bool,
+}
+
 /// Emitted as `cover://ready` when a cover has been cached for a game.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]

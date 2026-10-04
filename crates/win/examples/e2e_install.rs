@@ -37,6 +37,7 @@ fn main() {
         let alias = match c.id.as_str() {
             "optiscaler" => "optiscaler.7z",
             "optiscaler-nr" => "optiscaler-nr.zip",
+            "optiscaler-dlssnr" => "optiscaler-dlssnr.zip",
             "reshade" => "reshade_setup.exe",
             _ => "feeder.zip",
         };
@@ -64,13 +65,19 @@ fn main() {
         ..Settings::default()
     };
 
-    for (route, apis, ships) in [
-        (Route::ReShadeRenoDx, vec![GraphicsApi::Dx12], true),
-        (Route::ReShadeFeeder, vec![GraphicsApi::Dx11], false),
-        (Route::OptiScalerDlssNr, vec![GraphicsApi::Dx12], true),
-        (Route::OptiScaler, vec![GraphicsApi::Dx12], true),
+    for (route, apis, ships, before_upscale) in [
+        (Route::ReShadeRenoDx, vec![GraphicsApi::Dx12], true, true),
+        (Route::ReShadeFeeder, vec![GraphicsApi::Dx11], false, true),
+        (Route::OptiScalerDlssNr, vec![GraphicsApi::Dx12], true, true),
+        (
+            Route::OptiScalerDlssNr,
+            vec![GraphicsApi::Dx12],
+            true,
+            false,
+        ),
+        (Route::OptiScaler, vec![GraphicsApi::Dx12], true, true),
     ] {
-        let game_dir = root.join(format!("game-{route:?}"));
+        let game_dir = root.join(format!("game-{route:?}-{before_upscale}"));
         std::fs::create_dir_all(&game_dir).unwrap();
         std::fs::write(game_dir.join("G.exe"), b"pretend game").unwrap();
         std::fs::write(
@@ -80,7 +87,8 @@ fn main() {
         .unwrap();
         let before = snapshot(&game_dir);
 
-        let game = game(&game_dir, apis, route, ships);
+        let mut game = game(&game_dir, apis, route, ships);
+        game.neural = Some(shim_core::model::NeuralOptions { before_upscale });
         let plan = install::plan(&Inputs {
             game: &game,
             store: &store,
@@ -156,6 +164,7 @@ fn game(dir: &Path, apis: Vec<GraphicsApi>, route: Route, ships_dlss: bool) -> G
         cover: None,
         hidden: false,
         mode: None,
+        neural: None,
     }
 }
 

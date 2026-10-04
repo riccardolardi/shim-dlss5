@@ -291,6 +291,48 @@ pub fn set_game_mode(
     )
 }
 
+/// Choose the neural-pass placement for the OptiScaler + DLSS 5 mode. Refused
+/// while installed, because the placement decides which fork is installed.
+#[tauri::command]
+pub fn set_neural_options(
+    state: State<'_, AppState>,
+    game_id: String,
+    options: Option<shim_core::model::NeuralOptions>,
+) -> CmdResult<Game> {
+    let game = find_game(&state, &game_id)?;
+    if matches!(
+        game.status,
+        GameStatus::Installed { .. } | GameStatus::UpdateAvailable { .. }
+    ) {
+        return Err(Error::AlreadyInstalled.into());
+    }
+    update_game(
+        &state,
+        Game {
+            neural: options,
+            ..game
+        },
+    )
+}
+
+/// The decisive lines of the component log beside the exe after the game's
+/// last run, so a failed pass can be read without opening the file.
+#[tauri::command]
+pub fn last_run(
+    state: State<'_, AppState>,
+    game_id: String,
+) -> CmdResult<Option<shim_core::api::LastRun>> {
+    let game = find_game(&state, &game_id)?;
+    let Some(exe_dir) = game
+        .analysis
+        .as_ref()
+        .and_then(|a| a.exe.parent().map(Path::to_path_buf))
+    else {
+        return Ok(None);
+    };
+    Ok(shim_core::lastrun::read(&exe_dir))
+}
+
 /// Re-analyse one game from scratch (ignores the size+mtime cache).
 #[tauri::command]
 pub async fn rescan_game(app: AppHandle, game_id: String) -> CmdResult<Game> {

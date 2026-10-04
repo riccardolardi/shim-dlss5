@@ -16,6 +16,7 @@ import type { ComponentProgress } from "@/lib/generated/ComponentProgress";
 import type { InstallProgress } from "@/lib/generated/InstallProgress";
 import type { UpdateInfo } from "@/lib/generated/UpdateInfo";
 import type { InstallMode } from "@/lib/generated/InstallMode";
+import type { NeuralOptions } from "@/lib/generated/NeuralOptions";
 
 export type Screen =
   | { kind: "library" }
@@ -58,6 +59,7 @@ interface AppState {
   scan: () => Promise<void>;
   rescanGame: (gameId: string) => Promise<void>;
   setMode: (gameId: string, mode: InstallMode | null) => Promise<ErrorDto | null>;
+  setNeural: (gameId: string, options: NeuralOptions | null) => Promise<ErrorDto | null>;
   openFolder: (gameId: string) => Promise<ErrorDto | null>;
   setHidden: (gameId: string, hidden: boolean) => Promise<ErrorDto | null>;
   dismissUpdate: () => void;
@@ -151,6 +153,16 @@ export const useApp = create<AppState>((set, get) => ({
   setMode: async (gameId, mode) => {
     try {
       const game = await commands.setGameMode(gameId, mode);
+      set((s) => ({ library: replaceGame(s.library, game) }));
+      return null;
+    } catch (e) {
+      return toErrorDto(e);
+    }
+  },
+
+  setNeural: async (gameId, options) => {
+    try {
+      const game = await commands.setNeuralOptions(gameId, options);
       set((s) => ({ library: replaceGame(s.library, game) }));
       return null;
     } catch (e) {

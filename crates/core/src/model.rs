@@ -108,6 +108,27 @@ pub enum Route {
     ReShadeVulkan,
 }
 
+/// Per-game choice for [`InstallMode::OptiScalerDlss5`]. The placement picks
+/// the fork: before the upscaler is wilsjo2's build (`RunBeforeSR`), after
+/// it is Dagherbou's, the one known to run post-upscale where wilsjo2's does
+/// not (Bright Memory on the dev PC).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(default)]
+#[ts(export)]
+pub struct NeuralOptions {
+    /// Run the model on the render-resolution frame before the upscaler
+    /// (cheaper) instead of on the finished output.
+    pub before_upscale: bool,
+}
+
+impl Default for NeuralOptions {
+    fn default() -> Self {
+        Self {
+            before_upscale: true,
+        }
+    }
+}
+
 /// The user's per-game choice for games that ship DLSS. Games without DLSS
 /// always take the Feeder route; the choice is ignored there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, Default)]
@@ -205,4 +226,7 @@ pub struct Game {
     /// Per-game route choice; `None` means the default ([`InstallMode::Dlss5`]).
     #[serde(default)]
     pub mode: Option<InstallMode>,
+    /// Fork switches for [`InstallMode::OptiScalerDlss5`]; `None` = defaults.
+    #[serde(default)]
+    pub neural: Option<NeuralOptions>,
 }

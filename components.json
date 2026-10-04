@@ -45,6 +45,19 @@
       "summary": "OptiScaler with the DLSS 5 neural pass built in, run before the upscaler at render resolution (cheaper). Built on Dagherbou's fork; RTX 20 to 50. Optional mode for games that ship DLSS."
     },
     {
+      "id": "optiscaler-dlssnr",
+      "name": "OptiScaler + DLSS NR (post-upscale fork)",
+      "license": "GPL-3.0",
+      "publisher": "https://github.com/Dagherbou/OptiScaler_DLSSNR",
+      "version": "0.2.0",
+      "asset": "https://github.com/Dagherbou/OptiScaler_DLSSNR/releases/download/v0.2.0-dlssnr/OptiScaler-DLSSNR-v0.2.0.zip",
+      "sha256": "8eece7a4d7de6de5917f0c99ac60540b2d77022e7699bba717b0a6d9e1829bce",
+      "size": 130486024,
+      "archive": "zip",
+      "extract": { "strip": ["Licenses/", "!! EXTRACT", "setup_linux.sh", "setup_windows.bat"], "only": [] },
+      "summary": "OptiScaler with the DLSS 5 neural pass built in, run on the upscaled output. Used for the \"after upscaling\" placement; the build known to run where the pre-upscale fork does not."
+    },
+    {
       "id": "optiscaler",
       "name": "OptiScaler",
       "license": "GPL-3.0",

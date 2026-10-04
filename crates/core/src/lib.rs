@@ -11,6 +11,7 @@ pub mod components;
 pub mod discovery;
 pub mod error;
 pub mod install;
+pub mod lastrun;
 pub mod library;
 pub mod model;
 pub mod paths;

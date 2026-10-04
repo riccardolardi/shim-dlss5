@@ -138,7 +138,13 @@ mod tests {
         let ids: Vec<&str> = m.components.iter().map(|c| c.id.as_str()).collect();
         assert_eq!(
             ids,
-            vec!["reshade", "dlss5-feeder", "optiscaler-nr", "optiscaler"]
+            vec![
+                "reshade",
+                "dlss5-feeder",
+                "optiscaler-nr",
+                "optiscaler-dlssnr",
+                "optiscaler"
+            ]
         );
         for c in &m.components {
             assert!(c.asset.starts_with("https://"), "{}", c.id);

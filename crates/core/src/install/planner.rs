@@ -17,7 +17,7 @@ use crate::{
     analysis::dlss::MODEL_DLL,
     components::{ComponentManifest, ComponentStore},
     install::{manifest::ComponentPin, ChangeKind, PlannedChange},
-    model::{Game, GameStatus, GraphicsApi, Route},
+    model::{Game, GameStatus, GraphicsApi, NeuralOptions, Route},
     settings::Settings,
     Error, Result,
 };
@@ -183,14 +183,8 @@ pub fn plan(inputs: &Inputs<'_>) -> Result<Plan> {
             push_model(inputs, &exe_dir, &mut plan)?;
         }
         Route::OptiScalerDlssNr => {
-            plan_optiscaler(
-                inputs,
-                "optiscaler-nr",
-                &exe_dir,
-                &analysis.apis,
-                true,
-                &mut plan,
-            )?;
+            let (id, keys) = fork_for(game.neural.unwrap_or_default());
+            plan_optiscaler(inputs, id, &exe_dir, &analysis.apis, Some(&keys), &mut plan)?;
             push_model(inputs, &exe_dir, &mut plan)?;
         }
         Route::OptiScaler => {
@@ -199,7 +193,7 @@ pub fn plan(inputs: &Inputs<'_>) -> Result<Plan> {
                 "optiscaler",
                 &exe_dir,
                 &analysis.apis,
-                false,
+                None,
                 &mut plan,
             )?;
         }
@@ -330,7 +324,7 @@ fn plan_optiscaler(
     id: &str,
     exe_dir: &Path,
     apis: &[GraphicsApi],
-    neural: bool,
+    ini_keys: Option<&[(&str, &str, &str)]>,
     plan: &mut Plan,
 ) -> Result<()> {
     let c = component(inputs, id)?;
@@ -358,8 +352,11 @@ fn plan_optiscaler(
             let text = std::fs::read_to_string(&src).map_err(|e| Error::io(&src, e))?;
             plan.ops.push(FileOp::WriteText {
                 dst,
-                text: if neural { enable_dlssnr(&text) } else { text },
-                note: if neural {
+                text: match ini_keys {
+                    Some(keys) => patch_ini(&text, keys),
+                    None => text,
+                },
+                note: if ini_keys.is_some() {
                     format!("{} settings with the DLSS 5 pass switched on", c.name)
                 } else {
                     format!("{} default settings", c.name)
@@ -385,19 +382,41 @@ fn plan_optiscaler(
 /// placement, and the one a 12 GB card can afford (MSFS 2024 at 4K hung the
 /// GPU with the pass after upscaling at full resolution) — and leave the
 /// per-session frame capture off.
-pub const FORK_INI_KEYS: &[(&str, &str, &str)] = &[
-    ("Upscalers", "Dx12Upscaler", "dlss"),
-    ("Upscalers", "Dx11Upscaler", "dlss"),
-    ("DlssNr", "Enabled", "true"),
-    ("DlssNr", "RunBeforeSR", "true"),
-    ("DlssNr", "AutoCapture", "false"),
-    // The fork ships silent; a log beside the exe is what every report needs.
-    ("Log", "LogToFile", "true"),
-    ("Log", "LogLevel", "2"),
-];
+/// Component id and ini keys for the chosen placement.
+///
+/// Before the upscaler: wilsjo2's fork with `RunBeforeSR`. After it:
+/// Dagherbou's fork at half model resolution (its full-resolution pass hung a
+/// 12 GB card in MSFS 2024 at 4K). Both keep DLSS as the upscaler (`auto`
+/// would swap it for XeSS on DX12), skip the frame capture, and log to a
+/// file beside the exe, which the forks ship switched off.
+pub fn fork_for(
+    opts: NeuralOptions,
+) -> (
+    &'static str,
+    Vec<(&'static str, &'static str, &'static str)>,
+) {
+    let common = [
+        ("Upscalers", "Dx12Upscaler", "dlss"),
+        ("Upscalers", "Dx11Upscaler", "dlss"),
+        ("DlssNr", "Enabled", "true"),
+        ("DlssNr", "AutoCapture", "false"),
+        ("Log", "LogToFile", "true"),
+        ("Log", "LogLevel", "2"),
+    ];
+    if opts.before_upscale {
+        let mut keys = common.to_vec();
+        keys.push(("DlssNr", "RunBeforeSR", "true"));
+        ("optiscaler-nr", keys)
+    } else {
+        let mut keys = common.to_vec();
+        keys.push(("DlssNr", "WorkingScale", "0.5"));
+        ("optiscaler-dlssnr", keys)
+    }
+}
 
+/// Defaults: pass on, before the upscaler (wilsjo2's fork).
 pub fn enable_dlssnr(ini: &str) -> String {
-    patch_ini(ini, FORK_INI_KEYS)
+    patch_ini(ini, &fork_for(NeuralOptions::default()).1)
 }
 
 /// Set `key=value` under `[section]` for each entry. Existing lines are
@@ -599,6 +618,16 @@ pub mod testing {
                 ("READ ME - DLSS Neural Rendering.txt", b"readme"),
             ],
         );
+        let post = fake_component(
+            &store,
+            "optiscaler-dlssnr",
+            &[
+                ("OptiScaler.dll", b"opti-nr-post"),
+                ("OptiScaler.ini", FORK_INI.as_bytes()),
+                ("nvngx.dll_dlssnr.dll", b"snippet"),
+                ("OptiScaler/libxess.dll", b"xess"),
+            ],
+        );
         let upstream = fake_component(
             &store,
             "optiscaler",
@@ -613,7 +642,7 @@ pub mod testing {
         let manifest = ComponentManifest {
             schema: 1,
             updated: "test".into(),
-            components: vec![reshade, feeder, fork, upstream],
+            components: vec![reshade, feeder, fork, post, upstream],
         };
         (store, manifest)
     }
@@ -647,6 +676,7 @@ pub mod testing {
             cover: None,
             hidden: false,
             mode: None,
+            neural: None,
         }
     }
 
@@ -838,6 +868,34 @@ mod tests {
         std::fs::write(f.game_dir.join("dxgi.dll"), b"taken").unwrap();
         let plan = super::plan(&inputs).unwrap();
         assert!(names(&plan).contains(&"winmm.dll".to_string()));
+    }
+
+    #[test]
+    fn after_upscale_placement_uses_the_post_fork_at_half_model_resolution() {
+        let f = fx();
+        let mut game = game(
+            &f.game_dir,
+            &[GraphicsApi::Dx12],
+            Route::OptiScalerDlssNr,
+            true,
+        );
+        game.neural = Some(NeuralOptions {
+            before_upscale: false,
+        });
+        let plan = plan(&Inputs {
+            game: &game,
+            store: &f.store,
+            components: &f.components,
+            settings: &f.settings,
+        })
+        .unwrap();
+        assert_eq!(plan.components[0].id, "optiscaler-dlssnr");
+        let ini = text_of(&plan.ops[1]);
+        assert!(ini.contains("Enabled=true\r\n"));
+        assert!(ini.contains("WorkingScale=0.5\r\n"));
+        assert!(!ini.contains("RunBeforeSR=true"));
+        assert!(ini.contains("Dx12Upscaler=dlss"));
+        assert_eq!(fork_for(NeuralOptions::default()).0, "optiscaler-nr");
     }
 
     #[test]

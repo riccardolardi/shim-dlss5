@@ -3,6 +3,7 @@ import type { Analysis } from "./Analysis";
 import type { GameStatus } from "./GameStatus";
 import type { InstallMode } from "./InstallMode";
 import type { Launcher } from "./Launcher";
+import type { NeuralOptions } from "./NeuralOptions";
 
 /**
  * A game in the library.
@@ -15,4 +16,8 @@ id: string, launcher: Launcher, title: string, install_dir: string, launcher_id:
 /**
  * Per-game route choice; `None` means the default ([`InstallMode::Dlss5`]).
  */
-mode: InstallMode | null, };
+mode: InstallMode | null, 
+/**
+ * Fork switches for [`InstallMode::OptiScalerDlss5`]; `None` = defaults.
+ */
+neural: NeuralOptions | null, };

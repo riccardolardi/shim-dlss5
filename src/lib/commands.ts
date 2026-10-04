@@ -9,6 +9,8 @@ import type { Settings } from "@/lib/generated/Settings";
 import type { Library } from "@/lib/generated/Library";
 import type { Game } from "@/lib/generated/Game";
 import type { InstallMode } from "@/lib/generated/InstallMode";
+import type { NeuralOptions } from "@/lib/generated/NeuralOptions";
+import type { LastRun } from "@/lib/generated/LastRun";
 import type { ScanReport } from "@/lib/generated/ScanReport";
 import type { ScanProgress } from "@/lib/generated/ScanProgress";
 import type { Preview } from "@/lib/generated/Preview";
@@ -30,6 +32,9 @@ export const commands = {
   rescanGame: (gameId: string) => invoke<Game>("rescan_game", { gameId }),
   setGameMode: (gameId: string, mode: InstallMode | null) =>
     invoke<Game>("set_game_mode", { gameId, mode }),
+  setNeuralOptions: (gameId: string, options: NeuralOptions | null) =>
+    invoke<Game>("set_neural_options", { gameId, options }),
+  lastRun: (gameId: string) => invoke<LastRun | null>("last_run", { gameId }),
   openFolder: (gameId: string) => invoke<void>("open_folder", { gameId }),
   fetchCovers: () => invoke<Library>("fetch_covers"),
   checkUpdate: () => invoke<UpdateInfo | null>("check_update"),

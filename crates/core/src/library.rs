@@ -100,6 +100,7 @@ impl Library {
             Game {
                 hidden: hidden_games.contains(&id),
                 mode: known.and_then(|g| g.mode),
+                neural: known.and_then(|g| g.neural),
                 id,
                 launcher: d.launcher,
                 title: d.title.clone(),
@@ -222,6 +223,7 @@ mod tests {
             cover: Some(PathBuf::from("cover.jpg")),
             hidden: false,
             mode: None,
+            neural: None,
         }
     }
 
