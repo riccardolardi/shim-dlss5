@@ -84,6 +84,31 @@ pub struct Plan {
     pub components: Vec<ComponentPin>,
     pub model_sha256: Option<String>,
     pub user_files: Vec<(String, String)>,
+    /// Run-time artefacts the route's components create beside the exe
+    /// (logs, captures) that do not exist yet; removed on uninstall.
+    pub side_effects: Vec<PathBuf>,
+}
+
+/// What each family of components writes beside the exe while running.
+const RESHADE_ARTEFACTS: &[&str] = &[
+    "ReShade.log",
+    "ReShadePreset.ini",
+    "dlss5-feed.log",
+    "dlss5-feed.cfg",
+];
+const OPTISCALER_ARTEFACTS: &[&str] = &["OptiScaler.log", "dlssnr-capture", "OptiScaler.ini.bak"];
+
+fn side_effects(exe_dir: &Path, route: Route) -> Vec<PathBuf> {
+    let names: &[&str] = match route {
+        Route::ReShadeRenoDx | Route::ReShadeFeeder => RESHADE_ARTEFACTS,
+        Route::OptiScalerDlssNr | Route::OptiScaler => OPTISCALER_ARTEFACTS,
+        Route::ReShadeVulkan => &[],
+    };
+    names
+        .iter()
+        .map(|n| exe_dir.join(n))
+        .filter(|p| !p.exists())
+        .collect()
 }
 
 impl Plan {
@@ -143,6 +168,7 @@ pub fn plan(inputs: &Inputs<'_>) -> Result<Plan> {
         components: Vec::new(),
         model_sha256: None,
         user_files: Vec::new(),
+        side_effects: side_effects(&exe_dir, route),
     };
 
     match route {

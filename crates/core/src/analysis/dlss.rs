@@ -60,8 +60,10 @@ pub fn inspect(tree: &Tree, exe_dir: &Path) -> DlssFacts {
 /// Look at every proxy-named DLL beside the exe and at the config files
 /// those tools leave behind.
 fn foreign_proxies(tree: &Tree, exe_dir: &Path) -> (bool, bool) {
-    let mut reshade = tree.has_file("reshade.ini") || tree.has_dir("reshade-shaders");
-    let mut optiscaler = tree.has_file("optiscaler.ini") || tree.has_file("optiscaler.log");
+    // Config files and proxy DLLs count; logs, capture folders and shader
+    // packs do not: they are what a tool leaves behind after it is gone.
+    let mut reshade = tree.has_file("reshade.ini");
+    let mut optiscaler = tree.has_file("optiscaler.ini");
     for name in PROXY_NAMES {
         let path = exe_dir.join(name);
         if !path.is_file() {

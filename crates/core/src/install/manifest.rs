@@ -53,6 +53,11 @@ pub struct InstallManifest {
     pub anti_cheat_override: bool,
     /// In the order they were written; uninstall walks it backwards.
     pub files: Vec<FileRecord>,
+    /// Files and folders the installed components create by themselves at
+    /// run time (logs, captures) that did *not* exist before the install.
+    /// Removed on uninstall if present; never backed up, never restored.
+    #[serde(default)]
+    pub side_effects: Vec<PathBuf>,
 }
 
 impl InstallManifest {
@@ -125,6 +130,7 @@ mod tests {
             user_files: vec![],
             anti_cheat_override: false,
             files: vec![],
+            side_effects: vec![],
         }
     }
 

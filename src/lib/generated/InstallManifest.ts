@@ -15,4 +15,10 @@ user_files: Array<[string, string]>, anti_cheat_override: boolean,
 /**
  * In the order they were written; uninstall walks it backwards.
  */
-files: Array<FileRecord>, };
+files: Array<FileRecord>, 
+/**
+ * Files and folders the installed components create by themselves at
+ * run time (logs, captures) that did *not* exist before the install.
+ * Removed on uninstall if present; never backed up, never restored.
+ */
+side_effects: Array<string>, };

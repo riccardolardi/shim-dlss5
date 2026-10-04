@@ -258,6 +258,7 @@ mod tests {
             user_files: vec![],
             anti_cheat_override: false,
             files: vec![],
+            side_effects: vec![],
         };
         manifest.save(&paths).unwrap();
         let installed = analyse_game(&game, &paths, &components);

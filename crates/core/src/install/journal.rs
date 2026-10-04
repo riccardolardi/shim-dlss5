@@ -95,6 +95,7 @@ impl<'a> Journal<'a> {
             user_files: plan.user_files.clone(),
             anti_cheat_override,
             files: journal.records.clone(),
+            side_effects: plan.side_effects.clone(),
         };
         // No record means no way to undo later, so an unsaved manifest is
         // treated like a failed op.
@@ -182,9 +183,27 @@ impl<'a> Journal<'a> {
 }
 
 /// Undo an install from its manifest, newest file first, then forget it.
+/// Run-time artefacts of our components (logs, captures) that did not exist
+/// before the install go too; a failure there is logged, never fatal.
 pub fn uninstall(paths: &AppPaths, manifest: &InstallManifest) -> Result<()> {
     let root = manifest.exe.parent().unwrap_or(Path::new(""));
     rollback(&manifest.files, root)?;
+    for artefact in &manifest.side_effects {
+        if !artefact.starts_with(root) {
+            continue;
+        }
+        let result = if artefact.is_dir() {
+            std::fs::remove_dir_all(artefact)
+        } else if artefact.is_file() {
+            make_writable(artefact);
+            std::fs::remove_file(artefact)
+        } else {
+            Ok(())
+        };
+        if let Err(e) = result {
+            tracing::warn!(path = %artefact.display(), %e, "run-time artefact not removed");
+        }
+    }
     manifest.delete(paths)?;
     let _ = std::fs::remove_dir_all(paths.backups_dir(&manifest.game_id));
     Ok(())
@@ -490,6 +509,50 @@ mod tests {
                 assert!(!Journal::journal_path(&f.paths, "g1").exists());
             }
         }
+    }
+
+    #[test]
+    fn run_time_artefacts_of_our_components_go_on_uninstall_but_not_pre_existing_ones() {
+        let f = fixture(Route::ReShadeRenoDx);
+        // A log from an earlier, foreign ReShade run: not ours, must survive.
+        let old_log = f.game_dir.join("ReShade.log");
+        std::fs::write(&old_log, b"someone else's log").unwrap();
+        // Re-plan so the pre-existing log is excluded from side effects.
+        let plan = {
+            let (store, components) = fake_store(&f._tmp.path().join("store2"));
+            let settings = settings_with_user_files(f._tmp.path());
+            let game = game(
+                &f.game_dir,
+                &[GraphicsApi::Dx12],
+                Route::ReShadeRenoDx,
+                true,
+            );
+            planner::plan(&Inputs {
+                game: &game,
+                store: &store,
+                components: &components,
+                settings: &settings,
+            })
+            .unwrap()
+        };
+        assert!(!plan.side_effects.iter().any(|p| p.ends_with("ReShade.log")));
+        assert!(plan
+            .side_effects
+            .iter()
+            .any(|p| p.ends_with("ReShadePreset.ini")));
+        let before = snapshot(&f.game_dir);
+
+        let manifest = Journal::run(&f.paths, "g1", &plan, false, &mut |_| {}).unwrap();
+        // ReShade "runs" and leaves a preset and the feeder's cfg behind.
+        std::fs::write(f.game_dir.join("ReShadePreset.ini"), b"written by reshade").unwrap();
+        std::fs::write(f.game_dir.join("dlss5-feed.cfg"), b"written by feeder").unwrap();
+        uninstall(&f.paths, &manifest).unwrap();
+        assert_eq!(
+            snapshot(&f.game_dir),
+            before,
+            "artefacts gone, foreign log kept"
+        );
+        assert_eq!(std::fs::read(&old_log).unwrap(), b"someone else's log");
     }
 
     #[test]
