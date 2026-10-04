@@ -604,6 +604,19 @@ signed `E16BCF15…` for RTX 50; ShortFuse compatibility `E67DEE20…` for RTX
 Dagherbou's build ("custom runtime accepted"). Old `optiscaler-dlssnr` records
 read as *Update available* (component gone from the manifest).
 
+**2026-10-04, later — both forks, placement per game.** Bright Memory with
+wilsjo2's fork: OptiScaler + DLSS alone runs; the neural pass crashes the game in
+both placements (pre-SR: `_EvaluateFeature result: BAD00002` right after the pass
+edits the input, the game feeds DLSS an HDR float; post-SR: the log stops inside
+the pass at 4K). Dagherbou's post-upscale build had run on the same game the day
+before. So `NeuralOptions.before_upscale` (on `Game.neural`) selects the
+component: `true` → `optiscaler-nr` (wilsjo2, `RunBeforeSR=true`), `false` →
+`optiscaler-dlssnr` (Dagherbou, `WorkingScale=0.5`). Both write
+`Dx12/Dx11Upscaler=dlss`, `AutoCapture=false`, `LogToFile=true`, `LogLevel=2`.
+`lastrun.rs` + `last_run` command surface the decisive log lines on the Game page.
+Logs/shader packs no longer count as a foreign install; our components' run-time
+artefacts are removed on uninstall; the analysis cache is versioned.
+
 `InstallMode { Dlss5, OptiScalerDlss5, OptiScalerOnly }` lives on `Game.mode`
 (library.json, carried through merges), set by `set_game_mode`, refused while
 installed. The fork's own README: RTX 50 only, game must already use DLSS, DX12
