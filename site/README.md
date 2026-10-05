@@ -30,8 +30,7 @@ Replace `https://shim-dlss5.vercel.app` in `index.html` (canonical, `og:url`,
   Open Graph + Twitter card with `og.png` (1200×630, rendered by hand), JSON-LD
   `SoftwareApplication` + `FAQPage`, `robots.txt`, `sitemap.xml`, no scripts.
 - The levers that actually move a one-page site: the public GitHub README, a
-  Nexus Mods page, forum/Reddit posts that link here, and the "Tested games"
-  table (long-tail "<game> DLSS 5" searches). Add a row per real report.
+  Nexus Mods page, forum/Reddit posts that link here. A per-game list (long-tail "<game> DLSS 5" searches) is a later option.
 - Regenerate `og.png` after a tagline change (see the PowerShell snippet in the
   git history of this folder) and bump `softwareVersion` in the JSON-LD on
   each release.
