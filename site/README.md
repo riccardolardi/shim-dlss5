@@ -24,4 +24,4 @@ Open `site/index.html` in a browser, or `npx serve site`.
   the same commit as the feature.
 - Never link to a model or add-on download. The page says where they come from
   and that shim records their hash; nothing more.
-- Sponsor link: `https://github.com/sponsors/riccardolardi` (same as in-app).
+- Sponsor link: `https://ko-fi.com/riccardolardi` (same as in-app).

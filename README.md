@@ -61,7 +61,7 @@ says so if yours refuses.
 ## Support
 
 shim is free and will stay free. If it saved you an evening:
-**[github.com/sponsors/riccardolardi](https://github.com/sponsors/riccardolardi)** —
+**[ko-fi.com/riccardolardi](https://ko-fi.com/riccardolardi)** —
 also reachable from the heart in the app.
 
 ## Build from source
