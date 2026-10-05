@@ -135,6 +135,11 @@
   .panel .row:first-of-type { border-top: 0; }
   .panel .note { color: var(--panel-dim); }
 
+  /* Screenshots of the real app (demo data folder, covers off). */
+  .shot { margin: 0; min-width: 0; }
+  .shot img { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); }
+  .shot figcaption { margin-top: 10px; font-size: 13px; color: var(--fg-3); }
+
   /* Sections */
   section { padding-block: 56px; border-top: 1px solid var(--line); }
   section h2 { font-size: clamp(24px, 3vw, 32px); letter-spacing: -.015em; margin-bottom: 8px; }
@@ -215,21 +220,10 @@
       <p class="fine">Installer and portable exe, 2–7 MB. Hashes in <span class="mono">SHA256SUMS.txt</span>. Not code-signed yet, so SmartScreen will warn once.</p>
     </div>
 
-    <div class="panel" aria-label="What the app shows for a game">
-      <div class="title">Bright Memory Infinite Ray Tracing Benchmark</div>
-      <div class="badges">
-        <span class="badge">Steam</span><span class="badge good">Ready · DLSS 5 (ReShade + RenoDX)</span><span class="badge">64-bit</span><span class="badge">DX12</span><span class="badge">Unreal</span><span class="badge">Ships DLSS 2.1.28.0</span>
-      </div>
-      <div><span class="k">What shim-dlss5 would do</span></div>
-      <div style="margin:4px 0 14px">DX12 game that ships DLSS: ReShade loads the RenoDX DLSS&nbsp;5 add-on, which takes over the game's own DLSS pass. Turn DLSS on in the game's settings.</div>
-      <div><span class="k">What will change</span></div>
-      <div class="row"><span class="add">Add</span><span>dxgi.dll <span class="note">— ReShade 6.8.0 add-on build, as dxgi.dll</span></span></div>
-      <div class="row"><span class="add">Add</span><span>ReShade.ini <span class="note">— add-ons on, DLSS 5 add-on configured</span></span></div>
-      <div class="row"><span class="add">Add</span><span>renodx-dlss5.addon64 <span class="note">— your RenoDX DLSS 5 add-on</span></span></div>
-      <div class="row"><span class="bak">Replace (backed up)</span><span>nvngx_dlssnr.dll <span class="note">— your DLSS 5 model</span></span></div>
-      <div class="row"><span class="add">Add</span><span>shim.json <span class="note">— install record (lets shim-dlss5 undo everything)</span></span></div>
-      <div class="cap">The sentence and the file list are what the app shows before you click Install.</div>
-    </div>
+    <figure class="shot">
+      <img src="/img/game.png" width="1462" height="1305" alt="shim-dlss5 game page for S.T.A.L.K.E.R. 2: badges for DX12, Unreal and DLSS 310.4, the sentence explaining the ReShade + RenoDX route, an Install button, and the exact list of files it would add.">
+      <figcaption>The game page before Install: one sentence on what happens, then every file it will write.</figcaption>
+    </figure>
   </section>
 
   <section id="how">
@@ -240,6 +234,10 @@
       <div class="step"><div class="n">Open a game</div><h3>Read one sentence</h3><p>shim-dlss5 says which route it would take and why, and lists every file it would add or replace. Nothing runs from that view.</p></div>
       <div class="step"><div class="n">Install</div><h3>Then play. Or Remove.</h3><p>Every overwritten file is backed up first, every write is recorded before it happens. Remove walks the record backwards and restores the folder byte for byte.</p></div>
     </div>
+    <figure class="shot" style="margin-top:32px">
+      <img src="/img/library.png" width="1462" height="740" loading="lazy" alt="shim-dlss5 library after a scan: four Steam games, each marked Ready, with filters for Installed, Update available, Anti-cheat and Unsupported.">
+      <figcaption>After a scan. Each card says what shim-dlss5 can do for that game.</figcaption>
+    </figure>
   </section>
 
   <section id="routes">

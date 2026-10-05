@@ -13,12 +13,22 @@ pub fn run() {
         Err(e) => fatal(&e),
     };
     init_logging(&paths);
+    let covers_dir = paths.covers_dir();
     let state = state::AppState::boot(paths);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(state)
+        // The static asset scope names %LOCALAPPDATA%\shim; a data dir moved
+        // with SHIM_DATA_DIR needs its covers folder allowed at run time.
+        .setup(move |app| {
+            use tauri::Manager;
+            if let Err(e) = app.asset_protocol_scope().allow_directory(&covers_dir, true) {
+                tracing::warn!(%e, "covers folder not allowed for the asset protocol");
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
             commands::get_settings,
