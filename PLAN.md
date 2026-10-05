@@ -3,7 +3,7 @@
 A small, honest DLSS 5 injector for Windows. It scans your game library, tells you
 what it will do to a game, does it, and can undo it. Nothing else.
 
-Name: **shim** (repository `shim-dlss5`). A shim is exactly what it installs: a thin
+Name: **shim-dlss5** (repository `shim-dlss5`; crates and data dir keep the short `shim`). A shim is exactly what it installs: a thin
 proxy DLL beside the game, plus files next to it, all of which can be taken out again.
 
 ---

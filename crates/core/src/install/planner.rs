@@ -130,7 +130,7 @@ impl Plan {
         out.push(PlannedChange {
             kind: ChangeKind::Add,
             path: self.exe_dir().join(crate::install::manifest::SIDECAR),
-            note: "install record (lets shim undo everything)".into(),
+            note: "install record (lets shim-dlss5 undo everything)".into(),
         });
         out
     }

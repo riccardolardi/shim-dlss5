@@ -41,7 +41,7 @@ jobs:
         run: |
           New-Item -ItemType Directory out | Out-Null
           Copy-Item target/release/bundle/nsis/*.exe out/
-          Copy-Item target/release/shim.exe out/shim-portable.exe
+          Copy-Item target/release/shim.exe out/shim-dlss5-portable.exe
           Copy-Item components.json out/
           Get-ChildItem out | ForEach-Object {
             "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)"

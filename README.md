@@ -1,15 +1,15 @@
-# shim
+# shim-dlss5
 
 **Puts DLSS 5 neural rendering into a game, keeps it current, and takes it out
 again byte-for-byte.** Windows, DirectX 11/12. Nothing else.
 
-shim scans your Steam / Epic / GOG / Xbox / Ubisoft / EA libraries, reads each
+shim-dlss5 scans your Steam / Epic / GOG / Xbox / Ubisoft / EA libraries, reads each
 game's executable to see what it uses, tells you in one sentence what it would
 change, and installs with a journal that can undo everything. Three clicks:
 Scan, open a game, Install.
 
 > **You supply the model.** The DLSS 5 model (`nvngx_dlssnr.dll`) is an NVIDIA
-> file that shim never downloads, hosts or mirrors. You point shim at your copy;
+> file that shim-dlss5 never downloads, hosts or mirrors. You point shim-dlss5 at your copy;
 > it shows you the file's SHA-256 and whether its NVIDIA signature is intact.
 > The same goes for the RenoDX DLSS 5 add-on, which is only published on the
 > RenoDX Discord.
@@ -24,7 +24,7 @@ Scan, open a game, Install.
 
 Every third-party component is fetched from its publisher's own release page
 at run time, pinned by version and SHA-256 in [`components.json`](components.json),
-verified before it is unpacked, and never executed by shim (ReShade's setup exe
+verified before it is unpacked, and never executed by shim-dlss5 (ReShade's setup exe
 is only unpacked for its DLL). Games with kernel anti-cheat markers are blocked
 unless you type a confirmation.
 
@@ -34,7 +34,7 @@ Before an install you read the exact file list. During it, every file that
 would be overwritten is backed up first, and every write is recorded *before*
 it happens, so even a crash mid-copy is undone at the next start. **Remove**
 walks that record backwards and restores the folder byte-for-byte — including
-the logs and captures the components themselves write while running. shim
+the logs and captures the components themselves write while running. shim-dlss5
 never deletes by filename and never touches a ReShade or OptiScaler install it
 did not make.
 
@@ -60,7 +60,7 @@ says so if yours refuses.
 
 ## Support
 
-shim is free and will stay free. If it saved you an evening:
+shim-dlss5 is free and will stay free. If it saved you an evening:
 **[ko-fi.com/riccardolardi](https://ko-fi.com/riccardolardi)** —
 also reachable from the heart in the app.
 
@@ -88,6 +88,8 @@ src/           React app: screens, components, store, i18n, generated types
 
 ## Licence
 
-MIT. Third-party components shim downloads keep their own licences
+DLSS and NVIDIA are trademarks of NVIDIA Corporation. shim-dlss5 is not affiliated with or endorsed by NVIDIA, ReShade, RenoDX or OptiScaler. Provided as is, without warranty; never use it in anti-cheat-protected multiplayer games.
+
+MIT. Third-party components shim-dlss5 downloads keep their own licences
 (ReShade BSD-3, DLSS5-Feeder MIT, OptiScaler and its forks GPL-3); none of them
 is bundled.

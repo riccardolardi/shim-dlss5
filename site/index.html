@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>shim</title>
-<meta name="description" content="shim puts DLSS 5 neural rendering into a game, keeps it current, and takes it out again byte-for-byte. Free, open source, bundles nothing.">
-<meta property="og:title" content="shim — a small, honest DLSS 5 injector">
+<title>shim-dlss5</title>
+<meta name="description" content="shim-dlss5 puts DLSS 5 neural rendering into a game, keeps it current, and takes it out again byte-for-byte. Free, open source, bundles nothing.">
+<meta property="og:title" content="shim-dlss5 — a small, honest DLSS 5 injector">
 <meta property="og:description" content="Scan, open a game, Install. Every file recorded, every overwrite backed up, Remove restores the folder byte-for-byte.">
 <meta property="og:type" content="website">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23101612'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%234ade80'/%3E%3C/svg%3E">
@@ -151,7 +151,7 @@
 <div class="wrap">
 
   <header class="top">
-    <a class="brand" href="#"><i aria-hidden="true"></i>shim</a>
+    <a class="brand" href="#"><i aria-hidden="true"></i>shim-dlss5</a>
     <nav aria-label="Sections">
       <a href="#how">How it works</a>
       <a href="#routes">What it installs</a>
@@ -165,10 +165,10 @@
     <div>
       <div class="eyebrow">Windows · DirectX 11 / 12 · free and open source</div>
       <h1 style="margin-top:12px">DLSS 5 in your game. Out again, byte for byte.</h1>
-      <p class="lede">shim scans your Steam, Epic, GOG, Xbox, Ubisoft and EA libraries, tells you in one sentence what it would change, installs the DLSS 5 neural-rendering pass, and can undo every file it touched.</p>
+      <p class="lede">shim-dlss5 scans your Steam, Epic and GOG libraries (Xbox, Ubisoft and EA are detected too), tells you in one sentence what it would change, installs the DLSS 5 neural-rendering pass, and can undo every file it touched.</p>
       <div class="ctas">
         <a class="btn primary" href="https://github.com/riccardolardi/shim-dlss5/releases/latest">Download for Windows</a>
-        <a class="btn" href="https://ko-fi.com/riccardolardi"><span class="heart" aria-hidden="true">♥</span> Support shim</a>
+        <a class="btn" href="https://ko-fi.com/riccardolardi"><span class="heart" aria-hidden="true">♥</span> Support shim-dlss5</a>
       </div>
       <p class="fine">Installer and portable exe, 2–7 MB. Hashes in <span class="mono">SHA256SUMS.txt</span>. Not code-signed yet, so SmartScreen will warn once.</p>
     </div>
@@ -178,14 +178,14 @@
       <div class="badges">
         <span class="badge">Steam</span><span class="badge good">Ready · DLSS 5 (ReShade + RenoDX)</span><span class="badge">64-bit</span><span class="badge">DX12</span><span class="badge">Unreal</span><span class="badge">Ships DLSS 2.1.28.0</span>
       </div>
-      <div><span class="k">What shim would do</span></div>
+      <div><span class="k">What shim-dlss5 would do</span></div>
       <div style="margin:4px 0 14px">DX12 game that ships DLSS: ReShade loads the RenoDX DLSS&nbsp;5 add-on, which takes over the game's own DLSS pass. Turn DLSS on in the game's settings.</div>
       <div><span class="k">What will change</span></div>
       <div class="row"><span class="add">Add</span><span>dxgi.dll <span class="note">— ReShade 6.8.0 add-on build, as dxgi.dll</span></span></div>
       <div class="row"><span class="add">Add</span><span>ReShade.ini <span class="note">— add-ons on, DLSS 5 add-on configured</span></span></div>
       <div class="row"><span class="add">Add</span><span>renodx-dlss5.addon64 <span class="note">— your RenoDX DLSS 5 add-on</span></span></div>
       <div class="row"><span class="bak">Replace (backed up)</span><span>nvngx_dlssnr.dll <span class="note">— your DLSS 5 model</span></span></div>
-      <div class="row"><span class="add">Add</span><span>shim.json <span class="note">— install record (lets shim undo everything)</span></span></div>
+      <div class="row"><span class="add">Add</span><span>shim.json <span class="note">— install record (lets shim-dlss5 undo everything)</span></span></div>
       <div class="cap">The sentence and the file list are what the app shows before you click Install.</div>
     </div>
   </section>
@@ -195,7 +195,7 @@
     <p class="sub">No countdowns, no modals, no account.</p>
     <div class="steps">
       <div class="step"><div class="n">Scan</div><h3>Find your games</h3><p>One pass over the launchers you enable. Each game's executable is read to learn its graphics API, whether it ships DLSS, and whether an anti-cheat is in the folder.</p></div>
-      <div class="step"><div class="n">Open a game</div><h3>Read one sentence</h3><p>shim says which route it would take and why, and lists every file it would add or replace. Nothing runs from that view.</p></div>
+      <div class="step"><div class="n">Open a game</div><h3>Read one sentence</h3><p>shim-dlss5 says which route it would take and why, and lists every file it would add or replace. Nothing runs from that view.</p></div>
       <div class="step"><div class="n">Install</div><h3>Then play. Or Remove.</h3><p>Every overwritten file is backed up first, every write is recorded before it happens. Remove walks the record backwards and restores the folder byte for byte.</p></div>
     </div>
   </section>
@@ -211,14 +211,14 @@
             <tr><td>Ships DLSS<br><span class="mono" style="font-size:12px;color:var(--fg-3)">DX11 / DX12</span></td><td>ReShade (add-on build) hosting the <strong>RenoDX DLSS 5 add-on</strong> over the game's own DLSS output, plus your model.<br><span style="color:var(--fg-3);font-size:14px">Optional per game: OptiScaler with the pass built in, before or after upscaling (wilsjo2's and Dagherbou's forks), or plain OptiScaler.</span></td></tr>
             <tr><td>No DLSS<br><span class="mono" style="font-size:12px;color:var(--fg-3)">DX11 / DX12</span></td><td>The same, plus <strong>DLSS5-Feeder</strong> to synthesise depth and motion inputs, and your DLSS runtime.</td></tr>
             <tr><td>Vulkan, DX9/10, 32-bit</td><td>Not yet.</td></tr>
-            <tr><td>Anti-cheat detected</td><td>Blocked. Installing needs a typed confirmation, and shim says why.</td></tr>
+            <tr><td>Anti-cheat detected</td><td>Blocked. Installing needs a typed confirmation, and shim-dlss5 says why.</td></tr>
           </tbody>
         </table>
       </div>
       <div class="callout">
-        <p><strong>You supply the model.</strong> The DLSS 5 model, <span class="mono">nvngx_dlssnr.dll</span>, is an NVIDIA file. shim never downloads, hosts or mirrors it. You point shim at your copy; it shows the file's SHA-256 and whether its NVIDIA signature is intact.</p>
+        <p><strong>You supply the model.</strong> The DLSS 5 model, <span class="mono">nvngx_dlssnr.dll</span>, is an NVIDIA file. shim-dlss5 never downloads, hosts or mirrors it. You point shim-dlss5 at your copy; it shows the file's SHA-256 and whether its NVIDIA signature is intact.</p>
         <p>The same goes for the RenoDX DLSS 5 add-on, which its authors publish on their Discord, not on a release page.</p>
-        <p>shim bundles nothing and sends nothing. There is no telemetry, no account, no background service.</p>
+        <p>shim-dlss5 bundles nothing and sends nothing. There is no telemetry, no account, no background service.</p>
       </div>
     </div>
   </section>
@@ -247,7 +247,7 @@
       <div>
         <div class="eyebrow">Free, and staying free</div>
         <h2 style="margin-top:10px">If it saved you an evening, buy the next one</h2>
-        <p style="color:var(--fg-2)">shim is one person's project. There is no paid tier, no ads, and nothing is gated. Donations pay for the hours that go into:</p>
+        <p style="color:var(--fg-2)">shim-dlss5 is one person's project. There is no paid tier, no ads, and nothing is gated. Donations pay for the hours that go into:</p>
         <ul>
           <li>game reports: reading your logs and fixing the route for that game</li>
           <li>keeping the pinned components current when ReShade, Feeder and the OptiScaler forks ship</li>
@@ -267,17 +267,17 @@
     <h2>Questions</h2>
     <p class="sub">The ones that come up.</p>
     <div class="faq">
-      <details><summary>Will this get me banned in an online game?</summary><p>It can. Injecting a proxy DLL into a game with kernel anti-cheat (Easy Anti-Cheat, BattlEye, Vanguard, Ricochet and others) is exactly what those systems look for. shim detects the markers, blocks the game, and only proceeds after you type a confirmation. Use it in single-player games and benchmarks.</p></details>
+      <details><summary>Will this get me banned in an online game?</summary><p>It can. Injecting a proxy DLL into a game with kernel anti-cheat (Easy Anti-Cheat, BattlEye, Vanguard, Ricochet and others) is exactly what those systems look for. shim-dlss5 detects the markers, blocks the game, and only proceeds after you type a confirmation. Use it in single-player games and benchmarks.</p></details>
       <details><summary>Windows says the installer is unrecognised.</summary><p>The binaries are not code-signed yet; a certificate is one of the things sponsorship goes towards. Every release publishes <span class="mono">SHA256SUMS.txt</span>. Verify the hash, then choose "Run anyway". The portable exe works the same way without installing.</p></details>
-      <details><summary>Which GPU do I need?</summary><p>An NVIDIA RTX card. Which generations run the neural pass depends on the model build you have: NVIDIA's signed build initialises on RTX 50, community builds cover RTX 20 to 40. The log readout in shim tells you if the model refused your card. Memory matters more than you'd think: a 12 GB card at 4K with frame generation on is already full before the pass starts.</p></details>
-      <details><summary>Where do I get the model and the add-on?</summary><p>Not from shim, and not from this site. The model is an NVIDIA file; the RenoDX DLSS 5 add-on is published on the RenoDX Discord. shim records the hash and signature of whatever you point it at, so you know what you have.</p></details>
-      <details><summary>Does Remove really put everything back?</summary><p>Yes. Every file shim overwrote was copied to a backup first and is copied back; every file it added is deleted; the logs and captures the components wrote while running are removed too, unless they already existed before the install. A journal written before each step means even a crash mid-install is undone at the next start. shim never deletes by file name and never touches a ReShade or OptiScaler install it did not make.</p></details>
+      <details><summary>Which GPU do I need?</summary><p>An NVIDIA RTX card. Which generations run the neural pass depends on the model build you have. The log readout in shim-dlss5 tells you if the model refused your card. Memory matters more than you'd think: a 12 GB card at 4K with frame generation on is already full before the pass starts.</p></details>
+      <details><summary>Where do I get the model and the add-on?</summary><p>Not from shim-dlss5, and not from this site. The model is an NVIDIA file; the RenoDX DLSS 5 add-on is published on the RenoDX Discord. shim-dlss5 records the hash and signature of whatever you point it at, so you know what you have.</p></details>
+      <details><summary>Does Remove really put everything back?</summary><p>Yes. Every file shim-dlss5 overwrote was copied to a backup first and is copied back; every file it added is deleted; the logs and captures the components wrote while running are removed too, unless they already existed before the install. A journal written before each step means even a crash mid-install is undone at the next start. shim-dlss5 never deletes by file name and never touches a ReShade or OptiScaler install it did not make.</p></details>
       <details><summary>Is it open source?</summary><p>MIT, on <a href="https://github.com/riccardolardi/shim-dlss5">GitHub</a>. Rust core with 170 tests that run on Windows, macOS and Linux; a Tauri shell; nothing bundled. The components it fetches keep their own licences.</p></details>
     </div>
   </section>
 
   <footer>
-    <span>shim · MIT · not affiliated with NVIDIA, ReShade, RenoDX or OptiScaler</span>
+    <span>shim-dlss5 · MIT, no warranty · use at your own risk, never in anti-cheat-protected games · DLSS and NVIDIA are trademarks of NVIDIA Corporation; shim-dlss5 is not affiliated with or endorsed by NVIDIA, ReShade, RenoDX or OptiScaler · this site sets no cookies and runs no analytics</span>
     <span><a href="https://github.com/riccardolardi/shim-dlss5/releases/latest">Releases</a> · <a href="https://github.com/riccardolardi/shim-dlss5">Source</a> · <a href="https://ko-fi.com/riccardolardi">Ko-fi</a></span>
   </footer>
 

@@ -130,7 +130,7 @@ pub fn sketch(game: &Game) -> Vec<PlannedChange> {
     }
     out.push(add(
         "shim.json",
-        "install record (lets shim undo everything)",
+        "install record (lets shim-dlss5 undo everything)",
     ));
     out
 }
