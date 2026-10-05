@@ -17,6 +17,7 @@ pub mod model;
 pub mod paths;
 pub mod persist;
 pub mod platform;
+pub mod report;
 pub mod routing;
 pub mod scan;
 pub mod settings;

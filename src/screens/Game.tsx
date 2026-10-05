@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { SPONSOR_URL } from "@/lib/links";
+import { GAMES_URL, PRIVACY_URL, SPONSOR_URL } from "@/lib/links";
+import { toErrorDto } from "@/lib/commands";
+import type { Outcome } from "@/lib/generated/Outcome";
+import type { Report } from "@/lib/generated/Report";
 import { Button } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNote } from "@/components/ErrorNote";
@@ -382,9 +385,121 @@ function LastRunSection({ game }: { game: GameModel }) {
           <pre className="max-h-64 select-text overflow-auto whitespace-pre-wrap rounded-md bg-surface-2 p-3 font-mono text-xs text-text-2">
             {run.lines.join("\n")}
           </pre>
+          <ShareResult gameId={game.id} />
         </>
       )}
     </Section>
+  );
+}
+
+const outcomes: { value: Outcome; label: "share.works" | "share.no_effect" | "share.crashes" }[] = [
+  { value: "works", label: "share.works" },
+  { value: "no_effect", label: "share.no_effect" },
+  { value: "crashes", label: "share.crashes" },
+];
+
+/** Opt-in, preview-first report of how the game ran. */
+function ShareResult({ gameId }: { gameId: string }) {
+  const [open, setOpen] = useState(false);
+  const [report, setReport] = useState<Report | null>(null);
+  const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
+  const [error, setError] = useState<ErrorDto | null>(null);
+
+  const load = (outcome: Outcome | null) =>
+    commands
+      .reportPreview(gameId, outcome)
+      .then((r) => {
+        setReport(r);
+        setError(null);
+      })
+      .catch((e) => setError(toErrorDto(e)));
+
+  if (!open) {
+    return (
+      <div className="mt-3">
+        <Button
+          onClick={() => {
+            setOpen(true);
+            setState("idle");
+            void load(null);
+          }}
+        >
+          {t("share.button")}
+        </Button>
+      </div>
+    );
+  }
+
+  if (state === "sent") {
+    return (
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <p className="text-sm text-success">{t("share.done")}</p>
+        <Button onClick={() => void openUrl(GAMES_URL)}>{t("share.openGames")}</Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 rounded-md border border-border bg-surface-2 p-4 text-sm">
+      <div className="font-medium">{t("share.title")}</div>
+      <p className="mt-1 text-text-2">{t("share.body")}</p>
+      <div className="mt-3 text-xs text-text-3">{t("share.outcome")}</div>
+      <div className="mt-1 flex flex-wrap gap-2" role="radiogroup" aria-label={t("share.outcome")}>
+        {outcomes.map((o) => (
+          <label
+            key={o.value}
+            className={[
+              "flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5",
+              report?.outcome === o.value ? "border-accent" : "border-border",
+            ].join(" ")}
+          >
+            <input
+              type="radio"
+              name={`outcome-${gameId}`}
+              checked={report?.outcome === o.value}
+              onChange={() => void load(o.value)}
+            />
+            {t(o.label)}
+          </label>
+        ))}
+      </div>
+      <div className="mt-3 text-xs text-text-3">{t("share.preview")}</div>
+      <pre className="mt-1 max-h-72 select-text overflow-auto whitespace-pre-wrap rounded-md bg-surface p-3 font-mono text-xs text-text-2">
+        {report ? JSON.stringify(report, null, 2) : "…"}
+      </pre>
+      <p className="mt-2 text-xs text-text-3">
+        {t("share.privacy")}:{" "}
+        <button type="button" className="text-accent underline-offset-2 hover:underline" onClick={() => void openUrl(PRIVACY_URL)}>
+          {PRIVACY_URL.replace("https://", "")}
+        </button>
+      </p>
+      {error && (
+        <div className="mt-2">
+          <ErrorNote error={error} />
+        </div>
+      )}
+      <div className="mt-3 flex gap-2">
+        <Button
+          variant="primary"
+          disabled={!report || state === "sending"}
+          onClick={() => {
+            if (!report) return;
+            setState("sending");
+            setError(null);
+            commands
+              .submitReport(gameId, report.outcome)
+              .then(() => setState("sent"))
+              .catch((e) => {
+                setError(toErrorDto(e));
+                setState("idle");
+              });
+          }}
+        >
+          {state === "sending" ? t("share.sending") : t("share.send")}
+        </Button>
+        <Button onClick={() => setOpen(false)}>{t("share.cancel")}</Button>
+      </div>
+    </div>
   );
 }
 

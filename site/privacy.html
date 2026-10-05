@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Privacy — shim-dlss5</title>
+<meta name="description" content="What the shim-dlss5 app and website collect: no accounts, no cookies, no analytics; result reports are opt-in and anonymous.">
+<link rel="canonical" href="https://shim-dlss5.vercel.app/privacy">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23101612'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%234ade80'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/style.css">
+<style>
+  .doc h2 { font-size: 22px; margin: 36px 0 10px; }
+  .doc p, .doc li { color: var(--fg-2); }
+  .doc p + p { margin-top: 10px; }
+  .doc ul { padding-left: 20px; max-width: 65ch; }
+  .doc li + li { margin-top: 6px; }
+  .doc table { margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="/"><i aria-hidden="true"></i>shim-dlss5</a>
+    <nav aria-label="Sections">
+      <a href="/#how">How it works</a>
+      <a href="/games">Games</a>
+      <a href="/#support">Support</a>
+      <a href="https://github.com/riccardolardi/shim-dlss5">GitHub</a>
+    </nav>
+  </header>
+
+  <section class="doc" style="border-top:0">
+    <div class="eyebrow">Last updated 5 October 2026</div>
+    <h1 style="margin-top:10px;font-size:clamp(28px,4vw,40px)">Privacy</h1>
+    <p class="sub" style="margin-top:12px">Short version: no accounts, no cookies, no analytics, no tracking. The only thing the app ever sends about you is a result report, and only when you click Send after reading it.</p>
+
+    <h2>Who is responsible</h2>
+    <p>Riccardo Lardi, who publishes shim-dlss5 as a private, open-source project. Contact for anything on this page, including deletion requests: open an issue on <a href="https://github.com/riccardolardi/shim-dlss5/issues">GitHub</a> or send a private message via <a href="https://ko-fi.com/riccardolardi">Ko-fi</a>.</p>
+
+    <h2>The app</h2>
+    <p>shim-dlss5 runs on your PC. It reads your game launchers' records and your game folders to decide what it can install, and keeps its own files in <span class="mono">%LOCALAPPDATA%\shim</span>. None of that leaves your PC.</p>
+    <p>The app connects to the internet only to:</p>
+    <ul>
+      <li>download the components you choose to fetch, from their publishers (GitHub, reshade.me);</li>
+      <li>fetch game cover images from Steam's image server, for Steam games without a cached cover;</li>
+      <li>check GitHub for a newer release, if "Check for updates" is on in Settings;</li>
+      <li>send a result report, only when you click Send (below).</li>
+    </ul>
+    <p>Those services see your IP address as part of any internet request, under their own privacy policies. The app sends them no information about you beyond the request itself.</p>
+
+    <h2>Result reports</h2>
+    <p>On an installed game's page, "Share this result" shows the exact record before anything is sent. A report contains:</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Field</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td>Game and launcher id</td><td>Microsoft Flight Simulator 2024, Steam 2537590</td></tr>
+          <tr><td>How shim-dlss5 installed it</td><td>route, neural pass placement, component versions</td></tr>
+          <tr><td>The game's own DLSS version</td><td>310.6.0.0</td></tr>
+          <tr><td>Graphics card, memory, driver</td><td>NVIDIA GeForce RTX 5070, 12 GB, 616.56</td></tr>
+          <tr><td>Whether your model file's NVIDIA signature is intact</td><td>yes / no</td></tr>
+          <tr><td>Your answer</td><td>works / no visible effect / crashes</td></tr>
+          <tr><td>Up to five lines from the component log</td><td>with every file path cut down to the file name</td></tr>
+          <tr><td>App version</td><td>0.1.4</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>It contains no name, account, machine id, file path, Windows user name, or hash of your model file. Reports are anonymous: they cannot be linked to you or to each other, which also means we cannot find "your" report later. If you sent something you regret, contact us with the game and the date and we will delete matching reports.</p>
+    <p>Reports are stored in a Postgres database (Neon, hosted for us through Vercel) and shown in aggregate on the <a href="/games">games pages</a> once a game has two reports. They are kept as long as the games pages exist.</p>
+    <p><strong>Rate limiting.</strong> To stop flooding, the server computes a keyed hash of your IP address combined with the current date and keeps a counter under that hash for at most one day. The IP address itself is not stored with the report or anywhere else by us, and the hash changes every day, so it cannot be used to recognise you across days.</p>
+    <p>Legal basis (GDPR and the Swiss FADP): your consent, given each time you click Send, and our legitimate interest in keeping the service usable for the rate limiting.</p>
+
+    <h2>This website</h2>
+    <p>The site sets no cookies, runs no scripts, and uses no analytics or advertising. It is hosted by Vercel, whose servers log requests (including IP addresses) for security and operations for a limited time under <a href="https://vercel.com/legal/privacy-policy">Vercel's privacy policy</a>. Fonts are loaded from Google Fonts, which receives your IP address when your browser fetches them (<a href="https://policies.google.com/privacy">Google's privacy policy</a>). Links to GitHub and Ko-fi take you to those services under their own policies.</p>
+
+    <h2>Your rights</h2>
+    <p>You can ask for access to, correction or deletion of any data about you, and you can complain to your data protection authority. Since reports are anonymous, the most useful thing you can send is the game and date of a report you want removed.</p>
+
+    <h2>Changes</h2>
+    <p>If what the app sends ever changes, this page and the preview in the app change with it, before a release ships the new behaviour.</p>
+  </section>
+
+  <footer>
+    <span>shim-dlss5 · MIT, no warranty · DLSS and NVIDIA are trademarks of NVIDIA Corporation; not affiliated</span>
+    <span><a href="/">Home</a> · <a href="/games">Games</a> · <a href="https://ko-fi.com/riccardolardi">Ko-fi</a></span>
+  </footer>
+</div>
+</body>
+</html>

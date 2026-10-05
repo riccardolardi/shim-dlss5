@@ -14,6 +14,29 @@ One static page, no build step, no JavaScript. Deployed on Vercel.
 `vercel.json` adds clean URLs and security headers; the CSP allows only this
 origin, Google Fonts, and inline styles. No scripts run on the page.
 
+## Result reports (`/api/report`, `/games`)
+
+The app's "Share this result" POSTs one anonymous report to `/api/report`
+(`api/report.js`, validated by `lib/validate.js`); `/games` and
+`/games/<key>` are server-rendered by `api/games.js` from Postgres and cached at
+the edge for ten minutes. A game is listed from two reports.
+
+Setup, once:
+
+1. Vercel project → **Storage → Create Database → Neon** (Marketplace), connect it
+   to this project. That sets `DATABASE_URL`. Tables are created on first use.
+2. Project → Settings → Environment Variables → add `REPORT_SALT` with a long
+   random value (e.g. `openssl rand -hex 32`). It keys the daily IP hash used
+   for rate limiting; rotating it is harmless.
+3. Redeploy.
+
+Moderation: delete rows in the Neon console (`delete from reports where id = …`).
+Limits live in `lib/db.js` (`PER_HOUR`, `PER_GAME_PER_DAY`, `MIN_REPORTS`).
+What a report contains is described in `privacy.html` — change both together.
+
+Tests: `npm ci && npm test` (in `site/`) runs validation, rendering, the
+handlers, and the real SQL against PGlite. CI runs them too.
+
 ## Local preview
 
 Open `site/index.html` in a browser, or `npx serve site`.

@@ -34,6 +34,11 @@ fn open(hive: Hive, key: &str) -> Option<RegKey> {
 }
 
 impl Registry for WinRegistry {
+    fn read_u64(&self, hive: Hive, key: &str, value: &str) -> Option<u64> {
+        let k = open(hive, key)?;
+        k.get_value::<u64, _>(value).ok()
+    }
+
     fn read_string(&self, hive: Hive, key: &str, value: &str) -> Option<String> {
         let k = open(hive, key)?;
         match k.get_value::<String, _>(value) {

@@ -12,6 +12,10 @@ pub trait Registry: Send + Sync {
     fn read_string(&self, hive: Hive, key: &str, value: &str) -> Option<String>;
     /// Names of the direct subkeys of `key`, empty when it does not exist.
     fn subkeys(&self, hive: Hive, key: &str) -> Vec<String>;
+    /// Read a `REG_QWORD`. `None` when missing or not a QWORD.
+    fn read_u64(&self, _hive: Hive, _key: &str, _value: &str) -> Option<u64> {
+        None
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -100,6 +104,10 @@ pub mod testing {
     }
 
     impl Registry for FakeRegistry {
+        fn read_u64(&self, hive: Hive, key: &str, value: &str) -> Option<u64> {
+            self.read_string(hive, key, value)?.parse().ok()
+        }
+
         fn read_string(&self, hive: Hive, key: &str, value: &str) -> Option<String> {
             self.values
                 .get(&(hive, key.to_lowercase()))?

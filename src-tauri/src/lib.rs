@@ -24,7 +24,10 @@ pub fn run() {
         // with SHIM_DATA_DIR needs its covers folder allowed at run time.
         .setup(move |app| {
             use tauri::Manager;
-            if let Err(e) = app.asset_protocol_scope().allow_directory(&covers_dir, true) {
+            if let Err(e) = app
+                .asset_protocol_scope()
+                .allow_directory(&covers_dir, true)
+            {
                 tracing::warn!(%e, "covers folder not allowed for the asset protocol");
             }
             Ok(())
@@ -45,6 +48,8 @@ pub fn run() {
             commands::set_game_mode,
             commands::set_neural_options,
             commands::last_run,
+            commands::report_preview,
+            commands::submit_report,
             commands::rescan_game,
             commands::open_folder,
             commands::fetch_covers,

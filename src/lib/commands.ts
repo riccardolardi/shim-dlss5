@@ -11,6 +11,8 @@ import type { Game } from "@/lib/generated/Game";
 import type { InstallMode } from "@/lib/generated/InstallMode";
 import type { NeuralOptions } from "@/lib/generated/NeuralOptions";
 import type { LastRun } from "@/lib/generated/LastRun";
+import type { Outcome } from "@/lib/generated/Outcome";
+import type { Report } from "@/lib/generated/Report";
 import type { ScanReport } from "@/lib/generated/ScanReport";
 import type { ScanProgress } from "@/lib/generated/ScanProgress";
 import type { Preview } from "@/lib/generated/Preview";
@@ -35,6 +37,10 @@ export const commands = {
   setNeuralOptions: (gameId: string, options: NeuralOptions | null) =>
     invoke<Game>("set_neural_options", { gameId, options }),
   lastRun: (gameId: string) => invoke<LastRun | null>("last_run", { gameId }),
+  reportPreview: (gameId: string, outcome: Outcome | null) =>
+    invoke<Report>("report_preview", { gameId, outcome }),
+  submitReport: (gameId: string, outcome: Outcome) =>
+    invoke<void>("submit_report", { gameId, outcome }),
   openFolder: (gameId: string) => invoke<void>("open_folder", { gameId }),
   fetchCovers: () => invoke<Library>("fetch_covers"),
   checkUpdate: () => invoke<UpdateInfo | null>("check_update"),

@@ -11,7 +11,7 @@ import type { Theme } from "@/lib/generated/Theme";
 import type { ScanSources } from "@/lib/generated/ScanSources";
 import { t } from "@/i18n";
 
-import { REPO_URL, SPONSOR_URL } from "@/lib/links";
+import { PRIVACY_URL, REPO_URL, SPONSOR_URL } from "@/lib/links";
 
 const sources: (keyof Omit<ScanSources, "custom_folders">)[] = [
   "steam",
@@ -175,6 +175,17 @@ export function Settings() {
                 {SPONSOR_URL.replace("https://", "")}
               </button>
               <span className="block text-xs text-text-3">{t("support.hint")}</span>
+            </dd>
+            <dt className="text-text-2">{t("settings.about.privacy")}</dt>
+            <dd>
+              <button
+                type="button"
+                onClick={() => void openUrl(PRIVACY_URL)}
+                className="text-accent underline-offset-2 hover:underline"
+              >
+                {PRIVACY_URL.replace("https://", "")}
+              </button>
+              <span className="block text-xs text-text-3">{t("settings.about.privacyHint")}</span>
             </dd>
           </dl>
         </Section>

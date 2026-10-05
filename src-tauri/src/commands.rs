@@ -333,6 +333,64 @@ pub fn last_run(
     Ok(shim_core::lastrun::read(&exe_dir))
 }
 
+/// The exact report that "Share this result" would send. `outcome` None =
+/// the app's suggestion from the last run's log.
+#[tauri::command]
+pub async fn report_preview(
+    app: AppHandle,
+    game_id: String,
+    outcome: Option<shim_core::report::Outcome>,
+) -> CmdResult<shim_core::report::Report> {
+    blocking(move || build_report(&app.state::<AppState>(), &game_id, outcome)).await
+}
+
+/// Build the same report again and send it. Only ever called from the
+/// share form, after the user has seen the preview.
+#[tauri::command]
+pub async fn submit_report(
+    app: AppHandle,
+    game_id: String,
+    outcome: shim_core::report::Outcome,
+) -> CmdResult<()> {
+    blocking(move || {
+        let report = build_report(&app.state::<AppState>(), &game_id, Some(outcome))?;
+        shim_core::report::send(&report)?;
+        tracing::info!(title = %report.title, outcome = ?report.outcome, "result report sent");
+        Ok(())
+    })
+    .await
+}
+
+fn build_report(
+    state: &AppState,
+    game_id: &str,
+    outcome: Option<shim_core::report::Outcome>,
+) -> CmdResult<shim_core::report::Report> {
+    use shim_core::platform::Signature;
+    use shim_core::report;
+    let game = find_game(state, game_id)?;
+    let manifest = InstallManifest::load(&state.paths, game_id)?.ok_or(Error::NotInstalled)?;
+    let last_run = manifest.exe.parent().and_then(shim_core::lastrun::read);
+    let model = state.settings.lock().map_err(poisoned)?.model_path.clone();
+    let model_signed =
+        model
+            .filter(|p| p.is_file())
+            .and_then(|p| match state.platform.signatures.check(&p) {
+                Signature::Valid { .. } => Some(true),
+                Signature::HashMismatch { .. } | Signature::Unsigned => Some(false),
+                Signature::Unknown(_) => None,
+            });
+    Ok(report::build(&report::Inputs {
+        game: &game,
+        manifest: &manifest,
+        gpu: report::detect_gpu(state.platform.registry.as_ref()),
+        model_signed,
+        last_run: last_run.as_ref(),
+        outcome: outcome.unwrap_or_else(|| report::suggested_outcome(last_run.as_ref())),
+        app_version: env!("CARGO_PKG_VERSION"),
+    }))
+}
+
 /// Re-analyse one game from scratch (ignores the size+mtime cache).
 #[tauri::command]
 pub async fn rescan_game(app: AppHandle, game_id: String) -> CmdResult<Game> {

@@ -53,145 +53,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<style>
-  /* Layout: one narrow column of prose (65ch) with full-width "terminal" panels that
-     reproduce what the app itself shows: the sentence, the file list, the log. */
-  :root {
-    --bg: #f6f7f4;
-    --bg-2: #eceeea;
-    --panel: #101612;
-    --panel-fg: #d7e0d9;
-    --panel-dim: #7f8d84;
-    --fg: #141a16;
-    --fg-2: #4d5a52;
-    --fg-3: #7a877f;
-    --line: #d5dad6;
-    --accent: #1f8f4e;
-    --accent-ink: #ffffff;
-    --warn: #b7791f;
-    --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
-    --font-mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
-    color-scheme: light;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #0f1411; --bg-2: #171e19; --panel: #0a0e0b; --panel-fg: #d7e0d9; --panel-dim: #6f7d74;
-      --fg: #e6ebe7; --fg-2: #a9b4ad; --fg-3: #74817a; --line: #26302a;
-      --accent: #4ade80; --accent-ink: #0b2a17; --warn: #e2b14a; color-scheme: dark;
-    }
-  }
-  :root[data-theme="dark"] {
-    --bg: #0f1411; --bg-2: #171e19; --panel: #0a0e0b; --panel-fg: #d7e0d9; --panel-dim: #6f7d74;
-    --fg: #e6ebe7; --fg-2: #a9b4ad; --fg-3: #74817a; --line: #26302a;
-    --accent: #4ade80; --accent-ink: #0b2a17; --warn: #e2b14a; color-scheme: dark;
-  }
-  * { box-sizing: border-box; }
-  html { height: 100%; }
-  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px; line-height: 1.55; }
-  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
-  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-  .wrap { max-width: 72rem; margin: 0 auto; padding-inline: 20px; padding-block: 0; }
-  h1, h2, h3 { text-wrap: balance; line-height: 1.15; margin: 0; font-weight: 600; }
-  p { margin: 0; max-width: 65ch; }
-  .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-  .eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-3); }
-
-  /* Top bar */
-  .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-  .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; font-size: 18px; color: var(--fg); text-decoration: none; }
-  .brand i { width: 11px; height: 11px; border-radius: 50%; background: var(--accent); display: inline-block; }
-  .top nav { display: flex; gap: 18px; flex-wrap: wrap; font-size: 14px; }
-  .top nav a { color: var(--fg-2); text-decoration: none; }
-  .top nav a:hover { color: var(--fg); }
-
-  /* Buttons */
-  .btn { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding-inline: 18px; border-radius: 8px; font-weight: 500; font-size: 15px; text-decoration: none; border: 1px solid var(--line); color: var(--fg); background: var(--bg-2); white-space: nowrap; }
-  .btn:hover { border-color: var(--fg-3); }
-  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
-  .btn.primary:hover { filter: brightness(.95); }
-  .btn .heart { color: var(--accent); }
-  .btn.primary .heart { color: var(--accent-ink); }
-
-  /* Hero */
-  .hero { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 40px; align-items: center; padding-block: 64px 48px; }
-  .hero h1 { font-size: clamp(32px, 4.6vw, 52px); letter-spacing: -.02em; }
-  .hero .lede { font-size: 18px; color: var(--fg-2); margin-top: 18px; }
-  .hero .ctas { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 28px; }
-  .hero .fine { margin-top: 14px; font-size: 13px; color: var(--fg-3); }
-
-  /* Terminal-like panels: what the app shows, verbatim */
-  .panel { background: var(--panel); color: var(--panel-fg); border-radius: 10px; padding: 18px 20px; font-family: var(--font-mono); font-size: 13px; line-height: 1.6; overflow-x: auto; min-width: 0; }
-  .panel .k { color: var(--panel-dim); }
-  .panel .add { color: var(--accent); }
-  .panel .bak { color: var(--warn); }
-  .panel .ok { color: #4ade80; }
-  .panel .err { color: #f87171; }
-  .panel .title { color: #ffffff; font-family: var(--font-body); font-size: 15px; font-weight: 600; margin-bottom: 8px; }
-  .panel .cap { color: var(--panel-dim); font-family: var(--font-body); font-size: 12px; margin-top: 12px; }
-  .panel .badges { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 14px; }
-  .panel .badge { border: 1px solid #2a352e; border-radius: 4px; padding: 1px 7px; font-size: 11px; color: #c6d0c9; font-family: var(--font-body); }
-  .panel .badge.good { border-color: #2f6b47; color: #4ade80; }
-  .panel .row { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); gap: 10px; padding: 5px 0; border-top: 1px solid #1c251f; }
-  .panel .row:first-of-type { border-top: 0; }
-  .panel .note { color: var(--panel-dim); }
-
-  /* Screenshots of the real app (demo data folder, covers off). */
-  .shot { margin: 0; min-width: 0; }
-  .shot img { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); }
-  .shot figcaption { margin-top: 10px; font-size: 13px; color: var(--fg-3); }
-
-  /* Sections */
-  section { padding-block: 56px; border-top: 1px solid var(--line); }
-  section h2 { font-size: clamp(24px, 3vw, 32px); letter-spacing: -.015em; margin-bottom: 8px; }
-  section .sub { color: var(--fg-2); font-size: 17px; margin-bottom: 28px; }
-  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: start; }
-  .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
-  .step { display: grid; gap: 8px; }
-  .step .n { font-family: var(--font-mono); color: var(--accent); font-size: 13px; }
-  .step h3 { font-size: 18px; }
-  .step p { color: var(--fg-2); font-size: 15px; }
-
-  table { border-collapse: collapse; width: 100%; font-size: 15px; }
-  .tablewrap { overflow-x: auto; }
-  th, td { text-align: left; padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
-  th { font-weight: 600; font-size: 13px; color: var(--fg-3); letter-spacing: .04em; text-transform: uppercase; font-family: var(--font-mono); }
-  td code { font-family: var(--font-mono); font-size: 13px; }
-
-  .callout { border-left: 3px solid var(--accent); padding: 4px 0 4px 18px; }
-  .callout p + p { margin-top: 10px; }
-
-  /* Support */
-  .support { background: var(--bg-2); border-radius: 14px; padding: 36px; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 32px; align-items: center; }
-  .support h2 { margin-bottom: 10px; }
-  .support ul { margin: 16px 0 0; padding-left: 18px; color: var(--fg-2); }
-  .support li + li { margin-top: 6px; }
-  .support .box { display: grid; gap: 12px; justify-items: start; }
-  .support .amt { display: flex; gap: 8px; flex-wrap: wrap; }
-  .support .amt span { font-family: var(--font-mono); font-size: 13px; border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; color: var(--fg-2); }
-  .support .fine { font-size: 13px; color: var(--fg-3); }
-
-  /* FAQ */
-  .faq { display: grid; gap: 4px; }
-  details { border-top: 1px solid var(--line); }
-  details:last-child { border-bottom: 1px solid var(--line); }
-  summary { cursor: pointer; padding: 14px 0; font-weight: 500; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
-  summary::after { content: "+"; color: var(--fg-3); font-family: var(--font-mono); }
-  details[open] summary::after { content: "–"; }
-  details p { padding: 0 0 16px; color: var(--fg-2); }
-
-  footer { padding-block: 28px 48px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--fg-3); }
-  footer a { color: var(--fg-2); }
-
-  @media (max-width: 760px) {
-    .hero, .two, .support { grid-template-columns: minmax(0, 1fr); }
-    .steps { grid-template-columns: minmax(0, 1fr); }
-    .hero { padding-block: 40px 32px; }
-    .support { padding: 24px; }
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .btn { transition: filter .15s ease, border-color .15s ease; }
-  }
-</style>
+<link rel="stylesheet" href="/style.css">
 </head>
 <body>
 <div class="wrap">
@@ -201,6 +63,7 @@
     <nav aria-label="Sections">
       <a href="#how">How it works</a>
       <a href="#routes">What it installs</a>
+      <a href="/games">Games</a>
       <a href="#support">Support</a>
       <a href="#faq">FAQ</a>
       <a href="https://github.com/riccardolardi/shim-dlss5">GitHub</a>
@@ -317,7 +180,7 @@
 
   <footer>
     <span>shim-dlss5 · MIT, no warranty · use at your own risk, never in anti-cheat-protected games · DLSS and NVIDIA are trademarks of NVIDIA Corporation; shim-dlss5 is not affiliated with or endorsed by NVIDIA, ReShade, RenoDX or OptiScaler · this site sets no cookies and runs no analytics</span>
-    <span><a href="https://github.com/riccardolardi/shim-dlss5/releases/latest">Releases</a> · <a href="https://github.com/riccardolardi/shim-dlss5">Source</a> · <a href="https://ko-fi.com/riccardolardi">Ko-fi</a></span>
+    <span><a href="https://github.com/riccardolardi/shim-dlss5/releases/latest">Releases</a> · <a href="https://github.com/riccardolardi/shim-dlss5">Source</a> · <a href="https://ko-fi.com/riccardolardi">Ko-fi</a> · <a href="/games">Games</a> · <a href="/privacy">Privacy</a></span>
   </footer>
 
 </div>
