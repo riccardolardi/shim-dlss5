@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://shim-dlss5.vercel.app/sitemap.xml
