@@ -153,6 +153,33 @@ mod tests {
     }
 
     #[test]
+    fn feeder_extract_keeps_only_the_files_shim_installs() {
+        // The planner copies every extracted Feeder file next to the game. Files
+        // for setups shim does not install must be stripped, or ReShade loads
+        // them: the 32-bit add-on, the host64 helper process, and since 1.18 the
+        // 64-bit helper add-on, which hands frames to that absent process.
+        let m = ComponentManifest::embedded();
+        let feeder = m.get("dlss5-feeder").expect("feeder pinned");
+        for must_strip in [
+            "dlss5-feed-helper.addon64",
+            "dlss5-feed.addon32",
+            "host64/",
+            "layer-x64/",
+            "layer-x86/",
+        ] {
+            assert!(
+                feeder.extract.strip.iter().any(|s| s == must_strip),
+                "feeder strip rules must include {must_strip}"
+            );
+        }
+        assert!(!feeder
+            .extract
+            .strip
+            .iter()
+            .any(|s| s == "dlss5-feed.addon64" || s.starts_with("reshade-shaders")));
+    }
+
+    #[test]
     fn validation_rejects_bad_manifests() {
         let base = ComponentManifest::embedded();
         let mut dup = base.clone();

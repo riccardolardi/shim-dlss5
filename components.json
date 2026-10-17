@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-10-03",
+  "updated": "2026-10-17",
   "components": [
     {
       "id": "reshade",
@@ -20,13 +20,13 @@
       "name": "DLSS5-Feeder",
       "license": "MIT",
       "publisher": "https://github.com/jlrouzies-fr/DLSS5-Feeder",
-      "version": "1.17.0",
-      "asset": "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases/download/v1.17.0/DLSS5-Feeder-1.17.0.zip",
-      "sha256": "11a96b36ae89ef75b3cff0e03849db35591143fe4df171986502905809469e12",
-      "size": 390753,
+      "version": "1.19.0",
+      "asset": "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases/download/v1.19.0/DLSS5-Feeder-1.19.0.zip",
+      "sha256": "9cc19e28f8fb4e216ea61621fdf6443e207e338ec639979ab335503c75f48f36",
+      "size": 503554,
       "archive": "zip",
       "extract": {
-        "strip": ["host64/", "layer-x64/", "layer-x86/", "Verify-DLSS5Feeder.ps1", "dlss5-feed.addon32"],
+        "strip": ["host64/", "layer-x64/", "layer-x86/", "Verify-DLSS5Feeder.ps1", "dlss5-feed.addon32", "dlss5-feed-helper.addon64"],
         "only": []
       },
       "summary": "ReShade add-on that feeds depth and motion vectors to the DLSS 5 add-on in games without DLSS."
