@@ -476,7 +476,8 @@ All four Phase 2 steps are in. What exists:
 - **Components** (`crates/core/src/components/`): `components.json` at the repo root
   is compiled in (`ComponentManifest::embedded()`) and validated by a test. Pins:
   OptiScaler 0.9.4 (7z), ReShade 6.8.0 add-on build (the setup exe *is a zip* with
-  `ReShade64.dll` inside, so we unpack it and never run it), DLSS5-Feeder 1.17.0.
+  `ReShade64.dll` inside, so we unpack it and never run it), DLSS5-Feeder 1.17.0
+  (1.19.0 since 2026-10-17, see §12.0e).
   Hashes were computed from the publishers' assets on 2026-10-03. `fetch.rs` streams
   with a size cap and SHA-256; `extract.rs` handles zip/7z with path-traversal
   checks and strip/only rules; `store.rs` keeps `components\<id>\<version>\` with a
@@ -630,6 +631,43 @@ says "custom runtime accepted; untested build". Expected for non-RTX-50 builds.
 Old `optiscaler` install records from 0.1.0 still load (the variant stays in
 `Route`) so they can be removed through the app.
 
+### 12.0e Dependency and upstream review (2026-10-17, on macOS)
+
+Done on the Mac against v0.2.0; nothing here was exercised on Windows yet.
+
+- **Upstream pins re-checked.** All five assets in `components.json` still hash
+  to their pinned SHA-256 (nothing re-uploaded upstream). Status of each:
+
+  | Component | Pinned | Upstream on 2026-10-17 | Decision |
+  |---|---|---|---|
+  | DLSS5-Feeder | **1.19.0** (was 1.17.0) | 1.19.0 stable | Bumped |
+  | wilsjo2 OptiScaler-DLSSNR-PreSR-Multipass | 0.8.3 | 0.8.3 is still the newest stable; 0.8.9 and 0.8.91 are pre-releases (peripheral compression) | Kept |
+  | Dagherbou OptiScaler_DLSSNR | 0.2.0 | `v0.2.0-patch1` pre-release, only an Onimusha launch fix | Kept |
+  | OptiScaler | 0.9.4 | 0.9.4; nightly line is `v10.0.0-pre1` | Kept |
+  | ReShade add-on | 6.8.0 | 6.8.0 | Kept |
+
+- **Feeder 1.19.0 adds `dlss5-feed-helper.addon64`** (opt-in 64-bit helper mode
+  that hands frames to `host64\dlss5-feed-host64.exe`). The planner copies every
+  extracted Feeder file next to the game, so it is in the strip list; a test
+  (`feeder_extract_keeps_only_the_files_shim_installs`) keeps it there. **Check the
+  strip list whenever a component adds files.**
+- **The RenoDX DLSS 5 add-on is no longer in `clshortfuse/renodx` releases**
+  (only `renodx-dlssfix`). Other tools fetch it from the third-party
+  `RankFTW/rhi-repo` (8.5.0-rc10, no licence file, no checksums). shim keeps it
+  user-supplied, as before; nothing changed.
+- **GPU / model note** (`core/model_fit.rs`, `model_status` command,
+  `components/ModelNote.tsx`): NVIDIA's signed model (`e16bcf15…`) runs the neural
+  pass on RTX 50 only; ShortFuse's compatibility build (`e67dee20…`) covers RTX
+  20/30/40. Both hashes come from wilsjo2's `INSTALL-DLSSNR.md`. The Components
+  screen and the Game page (routes that install the model) say whether the
+  user's file suits the detected GPU. Never blocks. **Untested on Windows:**
+  check the note on the dev PC (its model `8270b350…` is neither known build, so
+  it should read "may still work").
+- **Dependencies:** Rust lockfile (tauri 2.12.4, 58 crates), zip 9 and
+  sevenz-rust2 0.24, front-end patches, TypeScript 7, jest-dom 7, site pglite
+  0.5.10. All six real upstream archives extract byte-for-byte identically with
+  the old and new archive crates.
+
 ### 12.1 Where things stand (end of Phase 0)
 
 - Repo: `git@github.com:riccardolardi/shim-dlss5.git`, branch `main`. Product name
@@ -752,6 +790,20 @@ green on the next push.
   nature: use `discovery::{is_windows_absolute, last_segment, win_join}` on them,
   never `Path` semantics. This had the Unix CI jobs red from Phase 1 to Phase 3
   while the Windows job was green; always check *all* CI jobs (`gh run list`).
+
+- **TypeScript 7** (native compiler, 2026-10-17): `baseUrl` is gone (paths are
+  relative, `"./src/*"`); side-effect imports such as `import "./x.css"` are
+  type-checked (hence `vite/client` in `types`); the compiler ships as
+  per-platform packages, so `@typescript/typescript-linux-x64` and `-win32-x64` are
+  pinned like the other native bindings.
+- **Bumping vite**: pin the rolldown bindings to the rolldown version vite
+  actually resolves (`node -p "require('./node_modules/rolldown/package.json').version"`),
+  not rolldown's newest. vite 8.3.4 needs lightningcss ^1.33, so the override and
+  its bindings moved to 1.33.0.
+- **zip 9**: `ZipFile::name()` returns a `Result` (it validates the name's
+  encoding); a malformed name is an archive error.
+- **Reformatting JSON**: rewriting `components.json` or `en.json` through a JSON
+  serializer reflows every entry; edit them as text so diffs stay reviewable.
 
 ### 12.5 Review items deliberately deferred
 
