@@ -1,7 +1,9 @@
 //! Process-wide state handed to commands.
 
+use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
+use std::time::SystemTime;
 
 use shim_core::{
     components::{ComponentManifest, ComponentStore},
@@ -25,6 +27,18 @@ pub struct AppState {
     /// Set while an install, removal or component fetch runs.
     pub busy: AtomicBool,
     pub startup_warnings: Vec<ErrorDto>,
+    /// SHA-256 of the user's model, so the 165 MB file is hashed once per
+    /// change rather than on every screen visit.
+    pub model_hash: Mutex<Option<HashCache>>,
+}
+
+/// A file's hash, valid while its path, size and modification time match.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HashCache {
+    pub path: PathBuf,
+    pub size: u64,
+    pub modified: Option<SystemTime>,
+    pub sha256: String,
 }
 
 impl AppState {
@@ -62,6 +76,7 @@ impl AppState {
             scanning: AtomicBool::new(false),
             busy: AtomicBool::new(false),
             startup_warnings,
+            model_hash: Mutex::new(None),
         }
     }
 }

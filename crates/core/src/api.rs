@@ -60,6 +60,17 @@ impl From<crate::platform::Signature> for SignatureDto {
     }
 }
 
+/// The detected GPU, the chosen model's build, and what to tell the user
+/// about the pair (see [`crate::model_fit`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct ModelStatus {
+    pub gpu: Option<crate::report::Gpu>,
+    pub family: Option<crate::model_fit::GpuFamily>,
+    pub build: Option<crate::model_fit::ModelBuild>,
+    pub fit: Option<crate::model_fit::ModelFit>,
+}
+
 /// Emitted as `component://progress` while a component downloads.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]

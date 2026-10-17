@@ -7,6 +7,8 @@ import { toErrorDto } from "@/lib/commands";
 import type { Outcome } from "@/lib/generated/Outcome";
 import type { Report } from "@/lib/generated/Report";
 import { Button } from "@/components/Button";
+import { ModelNote } from "@/components/ModelNote";
+import { routeUsesModel } from "@/lib/modelNote";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorNote } from "@/components/ErrorNote";
 import { Section } from "@/components/Section";
@@ -207,6 +209,9 @@ function RouteSection({ game }: { game: GameModel }) {
             <span className="text-xs text-warning">{t("game.notReady", { message: blocker.message })}</span>
           )}
         </div>
+
+        {(s.kind === "ready" || s.kind === "installed" || s.kind === "update_available") &&
+          routeUsesModel(s.route) && <ModelNote place="game" />}
 
         {busyHere && progress && (
           <div className="text-xs text-text-2" aria-live="polite">

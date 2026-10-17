@@ -43,6 +43,7 @@ pub fn run() {
             commands::get_components,
             commands::fetch_component,
             commands::inspect_file,
+            commands::model_status,
             commands::install_game,
             commands::remove_game,
             commands::set_game_mode,

@@ -14,6 +14,7 @@ pub mod install;
 pub mod lastrun;
 pub mod library;
 pub mod model;
+pub mod model_fit;
 pub mod paths;
 pub mod persist;
 pub mod platform;

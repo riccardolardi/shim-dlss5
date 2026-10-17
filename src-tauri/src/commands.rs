@@ -7,7 +7,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use shim_core::{
-    api::{AppInfo, ComponentProgress, FileInfo, InstallProgress, ScanProgress, ScanReport},
+    api::{
+        AppInfo, ComponentProgress, FileInfo, InstallProgress, ModelStatus, ScanProgress,
+        ScanReport,
+    },
     components::{self, ComponentRow},
     discovery,
     error::ErrorDto,
@@ -154,6 +157,49 @@ pub async fn inspect_file(app: AppHandle, path: String) -> CmdResult<FileInfo> {
         })
     })
     .await
+}
+
+/// The GPU, the chosen model's build, and whether the two suit each other.
+#[tauri::command]
+pub async fn model_status(app: AppHandle) -> CmdResult<ModelStatus> {
+    use shim_core::model_fit;
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let gpu = shim_core::report::detect_gpu(state.platform.registry.as_ref());
+        let family = gpu.as_ref().map(|g| model_fit::gpu_family(&g.name));
+        let model = state.settings.lock().map_err(poisoned)?.model_path.clone();
+        let sha = match model.filter(|p| p.is_file()) {
+            Some(path) => Some(cached_sha256(&state, &path)?),
+            None => None,
+        };
+        let build = sha.as_deref().map(model_fit::model_build);
+        Ok(ModelStatus {
+            fit: model_fit::model_fit(family, build),
+            gpu,
+            family,
+            build,
+        })
+    })
+    .await
+}
+
+fn cached_sha256(state: &AppState, path: &std::path::Path) -> CmdResult<String> {
+    let meta = std::fs::metadata(path).map_err(|e| Error::io(path, e))?;
+    let (size, modified) = (meta.len(), meta.modified().ok());
+    let mut cache = state.model_hash.lock().map_err(poisoned)?;
+    if let Some(c) = cache.as_ref() {
+        if c.path == path && c.size == size && c.modified == modified {
+            return Ok(c.sha256.clone());
+        }
+    }
+    let sha256 = shim_core::components::fetch::sha256_file(path)?;
+    *cache = Some(crate::state::HashCache {
+        path: path.to_path_buf(),
+        size,
+        modified,
+        sha256: sha256.clone(),
+    });
+    Ok(sha256)
 }
 
 /// Plan and run the install for one game. `confirm_anti_cheat` must be true

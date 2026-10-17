@@ -22,6 +22,7 @@ import type { ComponentProgress } from "@/lib/generated/ComponentProgress";
 import type { InstallProgress } from "@/lib/generated/InstallProgress";
 import type { CoverReady } from "@/lib/generated/CoverReady";
 import type { FileInfo } from "@/lib/generated/FileInfo";
+import type { ModelStatus } from "@/lib/generated/ModelStatus";
 import type { UpdateInfo } from "@/lib/generated/UpdateInfo";
 import type { ErrorDto } from "@/lib/generated/ErrorDto";
 
@@ -50,6 +51,7 @@ export const commands = {
   getComponents: () => invoke<ComponentRow[]>("get_components"),
   fetchComponent: (id: string) => invoke<ComponentRow>("fetch_component", { id }),
   inspectFile: (path: string) => invoke<FileInfo>("inspect_file", { path }),
+  modelStatus: () => invoke<ModelStatus>("model_status"),
   installGame: (gameId: string, confirmAntiCheat: boolean) =>
     invoke<Game>("install_game", { gameId, confirmAntiCheat }),
   removeGame: (gameId: string) => invoke<Game>("remove_game", { gameId }),

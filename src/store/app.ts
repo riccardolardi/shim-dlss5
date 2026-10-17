@@ -17,6 +17,7 @@ import type { InstallProgress } from "@/lib/generated/InstallProgress";
 import type { UpdateInfo } from "@/lib/generated/UpdateInfo";
 import type { InstallMode } from "@/lib/generated/InstallMode";
 import type { NeuralOptions } from "@/lib/generated/NeuralOptions";
+import type { ModelStatus } from "@/lib/generated/ModelStatus";
 
 export type Screen =
   | { kind: "library" }
@@ -53,6 +54,8 @@ interface AppState {
 
   /** A newer release, until dismissed. */
   updateInfo: UpdateInfo | null;
+  /** GPU and model pairing; null until loaded or when it can't be read. */
+  modelStatus: ModelStatus | null;
 
   go: (screen: Screen) => void;
   boot: () => Promise<void>;
@@ -65,6 +68,7 @@ interface AppState {
   dismissUpdate: () => void;
   relaunchElevated: () => Promise<ErrorDto | null>;
   updateSettings: (patch: Partial<Settings>) => Promise<ErrorDto | null>;
+  loadModelStatus: () => Promise<void>;
   loadComponents: () => Promise<void>;
   fetchComponent: (id: string) => Promise<void>;
   install: (gameId: string, confirmAntiCheat: boolean) => Promise<void>;
@@ -97,6 +101,7 @@ export const useApp = create<AppState>((set, get) => ({
   installProgress: null,
   installOutcome: {},
   updateInfo: null,
+  modelStatus: null,
 
   go: (screen) => set({ screen }),
 
@@ -108,6 +113,7 @@ export const useApp = create<AppState>((set, get) => ({
         commands.getLibrary(),
       ]);
       set({ info, settings, library, bootError: null });
+      void get().loadModelStatus();
       if (settings.check_updates && info.can_scan) {
         commands
           .checkUpdate()
@@ -216,10 +222,20 @@ export const useApp = create<AppState>((set, get) => ({
       const saved = await commands.saveSettings(next);
       // Only accept the server copy if no newer edit happened meanwhile.
       if (get().settings === next) set({ settings: saved });
+      if (saved.model_path !== current.model_path) void get().loadModelStatus();
       return null;
     } catch (e) {
       if (get().settings === next) set({ settings: current });
       return toErrorDto(e);
+    }
+  },
+
+  loadModelStatus: async () => {
+    try {
+      set({ modelStatus: await commands.modelStatus() });
+    } catch {
+      // Only a hint: without it the screens simply show no model note.
+      set({ modelStatus: null });
     }
   },
 

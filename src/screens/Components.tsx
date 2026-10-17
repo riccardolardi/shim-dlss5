@@ -8,6 +8,7 @@ import { useApp } from "@/store/app";
 import { commands, toErrorDto } from "@/lib/commands";
 import type { ComponentRow } from "@/lib/generated/ComponentRow";
 import type { FileInfo } from "@/lib/generated/FileInfo";
+import { ModelNote } from "@/components/ModelNote";
 import type { ErrorDto } from "@/lib/generated/ErrorDto";
 import type { Settings } from "@/lib/generated/Settings";
 import { t } from "@/i18n";
@@ -34,6 +35,7 @@ export function Components() {
 
       <div className="flex flex-col gap-4">
         <Section title={t("components.model.title")} description={t("components.model.body")}>
+          <ModelNote place="components" className="mb-3" />
           <div className="divide-y divide-border">
             {settings && userFiles.map((f) => <UserFileRow key={f.key} spec={f} settings={settings} />)}
           </div>
