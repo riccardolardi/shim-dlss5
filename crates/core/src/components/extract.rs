@@ -36,7 +36,8 @@ pub fn list(archive: &Path, kind: ArchiveKind) -> Result<Vec<String>> {
             for i in 0..zip.len() {
                 let entry = zip.by_index(i).map_err(|e| archive_err(archive, e))?;
                 if !entry.is_dir() {
-                    out.push(normalise(entry.name()));
+                    let name = entry.name().map_err(|e| archive_err(archive, e))?;
+                    out.push(normalise(&name));
                 }
             }
         }
@@ -67,7 +68,9 @@ fn extract_zip(archive: &Path, rules: &ExtractRules, dest: &Path) -> Result<Vec<
         if entry.is_dir() {
             continue;
         }
-        let name = normalise(entry.name());
+        // zip 9 validates the entry name's encoding; a malformed name is an
+        // archive error, never a guess.
+        let name = normalise(&entry.name().map_err(|e| archive_err(archive, e))?);
         let Some(target) = target_for(&name, rules, dest)? else {
             continue;
         };
