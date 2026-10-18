@@ -613,7 +613,15 @@ mod tests {
         uninstall(&paths, &manifest).unwrap();
         let second = planner::plan(&inputs).unwrap();
         Journal::run(&paths, "g1", &second, false, &mut |_| {}).unwrap();
-        assert_eq!(snapshot(&game_dir), installed);
+        // The record is new (its installed_at can tick over); the files are not.
+        let without_record = |mut s: BTreeMap<String, Vec<u8>>| {
+            s.remove(crate::install::manifest::SIDECAR);
+            s
+        };
+        assert_eq!(
+            without_record(snapshot(&game_dir)),
+            without_record(installed)
+        );
     }
 
     #[test]
