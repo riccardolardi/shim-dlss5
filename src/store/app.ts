@@ -29,7 +29,9 @@ export type Screen =
 export type InstallOutcome =
   | { kind: "installed"; files: number }
   | { kind: "removed" }
-  | { kind: "failed"; error: ErrorDto };
+  | { kind: "failed"; error: ErrorDto }
+  | { kind: "updated"; files: number }
+  | { kind: "update_failed"; error: ErrorDto };
 
 interface AppState {
   screen: Screen;
@@ -318,12 +320,34 @@ export const useApp = create<AppState>((set, get) => ({
     }
   },
 
+  // One command: fetch what's missing, check the new plan, and only then
+  // remove and reinstall. A failure before the removal leaves the game as it was.
   update: async (gameId) => {
     if (get().installing) return;
-    const previous = await commands.getInstall(gameId).catch(() => null);
-    await get().remove(gameId);
-    if (get().installOutcome[gameId]?.kind === "failed") return;
-    await get().install(gameId, previous?.anti_cheat_override ?? false);
+    set({ installing: gameId, installProgress: null });
+    const unlisten = await events
+      .onInstallProgress((p) => {
+        if (p.game_id === gameId) set({ installProgress: p });
+      })
+      .catch(() => null);
+    try {
+      const game = await commands.updateGame(gameId);
+      const manifest = await commands.getInstall(gameId).catch(() => null);
+      set((s) => ({
+        library: replaceGame(s.library, game),
+        installOutcome: {
+          ...s.installOutcome,
+          [gameId]: { kind: "updated", files: manifest?.files.length ?? 0 },
+        },
+      }));
+    } catch (e) {
+      set((s) => ({
+        installOutcome: { ...s.installOutcome, [gameId]: { kind: "update_failed", error: toErrorDto(e) } },
+      }));
+    } finally {
+      unlisten?.();
+      set({ installing: null, installProgress: null });
+    }
   },
 
   clearOutcome: (gameId) =>

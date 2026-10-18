@@ -183,6 +183,168 @@ pub async fn model_status(app: AppHandle) -> CmdResult<ModelStatus> {
     .await
 }
 
+/// Current hashes of the user's own files. A file that can't be read is left
+/// out, which never marks an install as outdated.
+fn user_hashes(state: &AppState, settings: &Settings) -> shim_core::install::manifest::UserHashes {
+    use shim_core::install::planner::{DLSS_RUNTIME_DLL, RENODX_ADDON};
+    let model = settings
+        .model_path
+        .as_deref()
+        .filter(|p| p.is_file())
+        .and_then(|p| cached_sha256(state, p).ok());
+    let files = [
+        (RENODX_ADDON, settings.renodx_addon_path.as_deref()),
+        (DLSS_RUNTIME_DLL, settings.dlss_runtime_path.as_deref()),
+    ]
+    .into_iter()
+    .filter_map(|(name, path)| {
+        let path = path.filter(|p| p.is_file())?;
+        let sha = shim_core::components::fetch::sha256_file(path).ok()?;
+        Some((name.to_string(), sha))
+    })
+    .collect();
+    shim_core::install::manifest::UserHashes { model, files }
+}
+
+/// What an Update would change for an installed game, in words. Empty when
+/// the install is current.
+#[tauri::command]
+pub async fn update_changes(app: AppHandle, game_id: String) -> CmdResult<Vec<String>> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let settings = state.settings.lock().map_err(poisoned)?.clone();
+        let Some(manifest) = InstallManifest::load(&state.paths, &game_id)? else {
+            return Ok(Vec::new());
+        };
+        Ok(manifest.changes(&state.components, &user_hashes(&state, &settings)))
+    })
+    .await
+}
+
+/// Bring an installed game up to the current pins and the user's current
+/// files. Order matters: missing components are fetched and the new plan is
+/// checked *before* the old install is touched, so a failure leaves the game
+/// exactly as it was.
+#[tauri::command]
+pub async fn update_game(app: AppHandle, game_id: String) -> CmdResult<Game> {
+    let state = app.state::<AppState>();
+    let _guard = Busy::acquire(&state.busy, "Another install or download is running.")?;
+    let worker = app.clone();
+    blocking(move || {
+        let state = worker.state::<AppState>();
+        let settings = state.settings.lock().map_err(poisoned)?.clone();
+        let game = find_game(&state, &game_id)?;
+        let manifest =
+            InstallManifest::load(&state.paths, &game_id)?.ok_or(Error::NotInstalled)?;
+        let say = |message: String| {
+            emit_event(
+                &worker,
+                INSTALL_PROGRESS_EVENT,
+                &InstallProgress {
+                    game_id: game_id.clone(),
+                    index: 0,
+                    total: 0,
+                    message,
+                },
+            );
+        };
+
+        // 1. Components the route needs, fetched now if this version isn't here yet.
+        let neural = game.neural.unwrap_or_default();
+        for id in shim_core::install::planner::components_for(manifest.route, neural) {
+            let Some(c) = state.components.get(id) else {
+                continue;
+            };
+            if state.store.status(c) == shim_core::components::ComponentStatus::Verified {
+                continue;
+            }
+            say(format!("Downloading {} {}", c.name, c.version));
+            let mut emit = |p: shim_core::components::fetch::Progress| {
+                emit_event(
+                    &worker,
+                    COMPONENT_PROGRESS_EVENT,
+                    &ComponentProgress {
+                        id: c.id.clone(),
+                        received: p.received,
+                        expected: p.expected,
+                    },
+                );
+            };
+            state.store.fetch(c, &mut emit)?;
+        }
+
+        // 2. Would the new install succeed once the old one is gone?
+        let target = Game {
+            status: GameStatus::Ready {
+                route: manifest.route,
+                reason: String::new(),
+            },
+            ..game.clone()
+        };
+        let inputs = Inputs {
+            game: &target,
+            store: &state.store,
+            components: &state.components,
+            settings: &settings,
+        };
+        let owned: Vec<_> = manifest.files.iter().map(|f| f.target.clone()).collect();
+        shim_core::install::planner::plan_over(&inputs, &owned)?;
+
+        // 3. Remove the old install, then install with the current pins.
+        say("Removing the old install".into());
+        install::uninstall(&state.paths, &manifest)?;
+        // From here on the old install is gone. Should the new one still fail
+        // (the check above makes that rare), say so plainly and leave the
+        // library showing the game as not installed.
+        let after_removal = |e: Error| -> ErrorDto {
+            tracing::error!(detail = %e.detail(), "update failed after removing the old install");
+            let fresh = scan::analyse_game(&game, &state.paths, &state.components);
+            if let Err(e) = update_game_record(&state, fresh) {
+                tracing::warn!(detail = %e.detail, "library not updated after a failed update");
+            }
+            ErrorDto {
+                code: e.code().to_string(),
+                message: format!(
+                    "The old install was removed and the folder restored, but the new one could not be written: {} Install again once that is fixed.",
+                    e.user_message()
+                ),
+                detail: e.detail(),
+            }
+        };
+        let plan = install::plan(&inputs).map_err(after_removal)?;
+        let total = plan.ops.len();
+        let mut emit = |s: install::Step| {
+            emit_event(
+                &worker,
+                INSTALL_PROGRESS_EVENT,
+                &InstallProgress {
+                    game_id: game_id.clone(),
+                    index: s.index,
+                    total,
+                    message: s.message,
+                },
+            );
+        };
+        let fresh = install::Journal::run(
+            &state.paths,
+            &game_id,
+            &plan,
+            manifest.anti_cheat_override,
+            &mut emit,
+        )
+        .map_err(after_removal)?;
+        tracing::info!(title = %game.title, route = ?fresh.route, files = fresh.files.len(), "updated");
+        update_game_record(
+            &state,
+            Game {
+                status: GameStatus::Installed { route: fresh.route },
+                ..game
+            },
+        )
+    })
+    .await
+}
+
 fn cached_sha256(state: &AppState, path: &std::path::Path) -> CmdResult<String> {
     let meta = std::fs::metadata(path).map_err(|e| Error::io(path, e))?;
     let (size, modified) = (meta.len(), meta.modified().ok());
@@ -267,7 +429,7 @@ pub async fn install_game(
             },
             ..game
         };
-        update_game(&state, updated)
+        update_game_record(&state, updated)
     })
     .await
 }
@@ -303,7 +465,7 @@ pub async fn remove_game(app: AppHandle, game_id: String) -> CmdResult<Game> {
             &state.paths,
             &state.components,
         );
-        update_game(&state, fresh)
+        update_game_record(&state, fresh)
     })
     .await
 }
@@ -327,7 +489,7 @@ pub fn set_game_mode(
         Some(a) => shim_core::routing::decide(a, mode),
         None => game.status.clone(),
     };
-    update_game(
+    update_game_record(
         &state,
         Game {
             mode,
@@ -352,7 +514,7 @@ pub fn set_neural_options(
     ) {
         return Err(Error::AlreadyInstalled.into());
     }
-    update_game(
+    update_game_record(
         &state,
         Game {
             neural: options,
@@ -443,15 +605,17 @@ pub async fn rescan_game(app: AppHandle, game_id: String) -> CmdResult<Game> {
     blocking(move || {
         let state = app.state::<AppState>();
         let game = find_game(&state, &game_id)?;
-        let fresh = scan::analyse_game(
+        let settings = state.settings.lock().map_err(poisoned)?.clone();
+        let fresh = scan::analyse_game_with(
             &Game {
                 analysis: None,
                 ..game
             },
             &state.paths,
             &state.components,
+            &user_hashes(&state, &settings),
         );
-        update_game(&state, fresh)
+        update_game_record(&state, fresh)
     })
     .await
 }
@@ -577,12 +741,14 @@ fn run_scan(app: &AppHandle) -> CmdResult<ScanReport> {
     let adapters = discovery::default_adapters(&settings.scan);
 
     let mut emit = |p: ScanProgress| emit_event(app, SCAN_PROGRESS_EVENT, &p);
+    let user = user_hashes(&state, &settings);
     let ctx = scan::Context {
         settings: &settings,
         platform: &state.platform,
         adapters: &adapters,
         paths: &state.paths,
         components: &state.components,
+        user: &user,
     };
     let result = scan::run(&before, &ctx, now(), &mut emit);
 
@@ -627,7 +793,7 @@ fn find_game(state: &AppState, game_id: &str) -> CmdResult<Game> {
 }
 
 /// Replace one game in the library, persist, return it.
-fn update_game(state: &AppState, game: Game) -> CmdResult<Game> {
+fn update_game_record(state: &AppState, game: Game) -> CmdResult<Game> {
     let mut library = state.library.lock().map_err(poisoned)?;
     let games = library
         .games

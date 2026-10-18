@@ -555,6 +555,67 @@ mod tests {
         assert_eq!(std::fs::read(&old_log).unwrap(), b"someone else's log");
     }
 
+    /// Update's order: check the new plan with the old install's files treated
+    /// as free, and only then remove and reinstall. A plan that can't be built
+    /// must leave the old install exactly as it was.
+    #[test]
+    fn update_checks_the_new_plan_before_removing_the_old_install() {
+        let tmp = tempfile::tempdir().unwrap();
+        let paths = AppPaths::at(tmp.path().join("data"));
+        paths.ensure().unwrap();
+        let (store, components) = fake_store(&tmp.path().join("store"));
+        let game_dir = tmp.path().join("game");
+        std::fs::create_dir_all(&game_dir).unwrap();
+        std::fs::write(game_dir.join("G.exe"), b"game").unwrap();
+        let settings = settings_with_user_files(tmp.path());
+        let game = game(&game_dir, &[GraphicsApi::Dx12], Route::ReShadeRenoDx, true);
+        let inputs = Inputs {
+            game: &game,
+            store: &store,
+            components: &components,
+            settings: &settings,
+        };
+        let first = planner::plan(&inputs).unwrap();
+        let manifest = Journal::run(&paths, "g1", &first, false, &mut |_| {}).unwrap();
+        let installed = snapshot(&game_dir);
+        let owned: Vec<PathBuf> = manifest.files.iter().map(|f| f.target.clone()).collect();
+
+        // Our own dxgi.dll and ReShade.ini block a plain plan, but not one
+        // that knows they belong to the current install.
+        assert_eq!(
+            planner::plan(&inputs).unwrap_err().code(),
+            "foreign_proxy_present"
+        );
+        assert!(planner::plan_over(&inputs, &owned).is_ok());
+        // ...and that knowledge does not leak into the next plain plan.
+        assert!(planner::plan(&inputs).is_err());
+
+        // The user cleared their model: the check fails and nothing is touched.
+        let no_model = crate::settings::Settings {
+            model_path: None,
+            ..settings.clone()
+        };
+        let broken = Inputs {
+            settings: &no_model,
+            ..inputs
+        };
+        assert_eq!(
+            planner::plan_over(&broken, &owned).unwrap_err().code(),
+            "user_file_missing"
+        );
+        assert_eq!(
+            snapshot(&game_dir),
+            installed,
+            "failed check left the install alone"
+        );
+
+        // A good check: remove, plan on the clean folder, install again.
+        uninstall(&paths, &manifest).unwrap();
+        let second = planner::plan(&inputs).unwrap();
+        Journal::run(&paths, "g1", &second, false, &mut |_| {}).unwrap();
+        assert_eq!(snapshot(&game_dir), installed);
+    }
+
     #[test]
     fn read_only_game_files_are_replaced_and_restored() {
         let f = fixture(Route::ReShadeRenoDx);

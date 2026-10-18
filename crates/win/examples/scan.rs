@@ -23,6 +23,7 @@ fn main() {
         adapters: &adapters,
         paths: &paths,
         components: &components,
+        user: &shim_core::install::manifest::UserHashes::default(),
     };
     let result = scan::run(&Library::default(), &ctx, 0, &mut |p| {
         if let Some(title) = &p.title {

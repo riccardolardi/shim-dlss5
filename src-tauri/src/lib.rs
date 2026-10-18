@@ -46,6 +46,8 @@ pub fn run() {
             commands::model_status,
             commands::install_game,
             commands::remove_game,
+            commands::update_game,
+            commands::update_changes,
             commands::set_game_mode,
             commands::set_neural_options,
             commands::last_run,

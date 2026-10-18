@@ -213,6 +213,8 @@ function RouteSection({ game }: { game: GameModel }) {
         {(s.kind === "ready" || s.kind === "installed" || s.kind === "update_available") &&
           routeUsesModel(s.route) && <ModelNote place="game" />}
 
+        {s.kind === "update_available" && !busyHere && <UpdateChanges gameId={game.id} status={s.kind} />}
+
         {busyHere && progress && (
           <div className="text-xs text-text-2" aria-live="polite">
             {progress.total > 0 ? `${progress.index + 1}/${progress.total} · ` : ""}
@@ -527,7 +529,42 @@ function Outcome({ outcome }: { outcome: NonNullable<ReturnType<typeof useApp.ge
           <ErrorNote error={outcome.error} />
         </div>
       );
+    case "updated":
+      return <p className="text-sm text-success">{t("game.updateDone", { n: outcome.files })}</p>;
+    case "update_failed":
+      return (
+        <div className="flex flex-col gap-2">
+          <p className="text-sm text-text-2">{t("game.updateFailed")}</p>
+          <ErrorNote error={outcome.error} />
+        </div>
+      );
   }
+}
+
+/** What Update would change: newer component pins, the user's own new files. */
+function UpdateChanges({ gameId, status }: { gameId: string; status: string }) {
+  const [changes, setChanges] = useState<string[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    commands
+      .updateChanges(gameId)
+      .then((c) => live && setChanges(c))
+      .catch(() => live && setChanges(null));
+    return () => {
+      live = false;
+    };
+  }, [gameId, status]);
+  if (!changes?.length) return null;
+  return (
+    <div className="text-sm">
+      <div className="text-xs text-text-3">{t("game.updateChanges")}</div>
+      <ul className="mt-1 list-disc pl-5 text-text-2">
+        {changes.map((c) => (
+          <li key={c}>{c}</li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function RemoveConfirm({

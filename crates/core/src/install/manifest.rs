@@ -97,12 +97,52 @@ impl InstallManifest {
 
     /// True when any pinned component differs from what is installed.
     pub fn is_outdated(&self, current: &crate::components::ComponentManifest) -> bool {
-        self.components.iter().any(|pin| {
-            current.get(&pin.id).is_none_or(|c| {
-                c.version != pin.version || !c.sha256.eq_ignore_ascii_case(&pin.sha256)
-            })
-        })
+        !self.changes(current, &UserHashes::default()).is_empty()
     }
+
+    /// What an Update would change, in words for the Game page: newer
+    /// component pins, and the user's own files if they picked new ones.
+    /// Empty means the install is current.
+    pub fn changes(
+        &self,
+        current: &crate::components::ComponentManifest,
+        user: &UserHashes,
+    ) -> Vec<String> {
+        let mut out = Vec::new();
+        for pin in &self.components {
+            match current.get(&pin.id) {
+                None => out.push(format!("{} {} is no longer used", pin.id, pin.version)),
+                Some(c) if c.version != pin.version => {
+                    out.push(format!("{} {} → {}", c.name, pin.version, c.version))
+                }
+                Some(c) if !c.sha256.eq_ignore_ascii_case(&pin.sha256) => {
+                    out.push(format!("{} {} was re-pinned", c.name, c.version))
+                }
+                Some(_) => {}
+            }
+        }
+        if let (Some(installed), Some(now)) = (&self.model_sha256, &user.model) {
+            if !installed.eq_ignore_ascii_case(now) {
+                out.push("your DLSS 5 model file changed".into());
+            }
+        }
+        for (name, installed) in &self.user_files {
+            let now = user.files.iter().find(|(n, _)| n == name).map(|(_, h)| h);
+            if now.is_some_and(|h| !h.eq_ignore_ascii_case(installed)) {
+                out.push(format!("your {name} changed"));
+            }
+        }
+        out
+    }
+}
+
+/// Current SHA-256 of the user's own files, under the names install records
+/// use (`renodx-dlss5.addon64`, `nvngx_dlss.dll`). A missing entry is not a
+/// change: a file the user cleared is not a reason to touch a working install.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct UserHashes {
+    pub model: Option<String>,
+    pub files: Vec<(String, String)>,
 }
 
 #[cfg(test)]
@@ -164,5 +204,42 @@ mod tests {
         assert!(m.is_outdated(&current));
         m.components[0].id = "gone".into();
         assert!(m.is_outdated(&current));
+    }
+
+    #[test]
+    fn changes_name_component_moves_and_changed_user_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let current = ComponentManifest::embedded();
+        let mut m = manifest(tmp.path());
+        m.model_sha256 = Some("aa".into());
+        m.user_files = vec![("renodx-dlss5.addon64".into(), "bb".into())];
+
+        let same = UserHashes {
+            model: Some("AA".into()),
+            files: vec![("renodx-dlss5.addon64".into(), "bb".into())],
+        };
+        assert!(
+            m.changes(&current, &same).is_empty(),
+            "case-insensitive, nothing moved"
+        );
+        assert!(
+            m.changes(&current, &UserHashes::default()).is_empty(),
+            "cleared files are not a change"
+        );
+
+        let reshade = current.get("reshade").unwrap().version.clone();
+        m.components[0].version = "6.7.0".into();
+        let moved = UserHashes {
+            model: Some("cc".into()),
+            files: vec![("renodx-dlss5.addon64".into(), "dd".into())],
+        };
+        assert_eq!(
+            m.changes(&current, &moved),
+            vec![
+                format!("ReShade (add-on build) 6.7.0 → {reshade}"),
+                "your DLSS 5 model file changed".to_string(),
+                "your renodx-dlss5.addon64 changed".to_string(),
+            ]
+        );
     }
 }

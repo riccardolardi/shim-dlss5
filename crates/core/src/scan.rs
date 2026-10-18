@@ -7,7 +7,7 @@ use crate::{
     api::ScanProgress,
     components::ComponentManifest,
     discovery::{self, DiscoveryOutcome, LauncherAdapter},
-    install::InstallManifest,
+    install::{manifest::UserHashes, InstallManifest},
     library::Library,
     model::{Game, GameStatus},
     paths::AppPaths,
@@ -27,6 +27,9 @@ pub struct Context<'a> {
     pub adapters: &'a [Box<dyn LauncherAdapter>],
     pub paths: &'a AppPaths,
     pub components: &'a ComponentManifest,
+    /// Current hashes of the user's model and add-on files, so a newly picked
+    /// file shows installed games as "Update available".
+    pub user: &'a UserHashes,
 }
 
 /// Run every enabled adapter, then analyse each game whose executable is new
@@ -56,7 +59,7 @@ pub fn run(
                 total,
                 title: Some(game.title.clone()),
             });
-            analyse_game(game, ctx.paths, ctx.components)
+            analyse_game_with(game, ctx.paths, ctx.components, ctx.user)
         })
         .collect();
     progress(ScanProgress {
@@ -74,6 +77,16 @@ pub fn run(
 /// Analyse one game (reusing its cached analysis when the exe is unchanged)
 /// and derive its status, with install state from the manifest on top.
 pub fn analyse_game(game: &Game, paths: &AppPaths, components: &ComponentManifest) -> Game {
+    analyse_game_with(game, paths, components, &UserHashes::default())
+}
+
+/// [`analyse_game`], also counting changed user files as an update.
+pub fn analyse_game_with(
+    game: &Game,
+    paths: &AppPaths,
+    components: &ComponentManifest,
+    user: &UserHashes,
+) -> Game {
     let discovered = crate::model::DiscoveredGame {
         launcher: game.launcher,
         title: game.title.clone(),
@@ -98,15 +111,20 @@ pub fn analyse_game(game: &Game, paths: &AppPaths, components: &ComponentManifes
             }
         }
     };
-    with_install_state(analysed, paths, components)
+    with_install_state(analysed, paths, components, user)
 }
 
 /// A game with our manifest is Installed (or UpdateAvailable), whatever the
 /// folder analysis says: our own proxy DLL must not read as "foreign".
-pub fn with_install_state(game: Game, paths: &AppPaths, components: &ComponentManifest) -> Game {
+pub fn with_install_state(
+    game: Game,
+    paths: &AppPaths,
+    components: &ComponentManifest,
+    user: &UserHashes,
+) -> Game {
     match InstallManifest::load(paths, &game.id) {
         Ok(Some(m)) => {
-            let status = if m.is_outdated(components) {
+            let status = if !m.changes(components, user).is_empty() {
                 GameStatus::UpdateAvailable { route: m.route }
             } else {
                 GameStatus::Installed { route: m.route }
@@ -186,6 +204,7 @@ mod tests {
             adapters: &adapters,
             paths: &paths,
             components: &components,
+            user: &UserHashes::default(),
         };
         let mut seen = Vec::new();
         let result = run(&Library::default(), &ctx, 42, &mut |p| seen.push(p));

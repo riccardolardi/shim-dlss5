@@ -55,6 +55,8 @@ export const commands = {
   installGame: (gameId: string, confirmAntiCheat: boolean) =>
     invoke<Game>("install_game", { gameId, confirmAntiCheat }),
   removeGame: (gameId: string) => invoke<Game>("remove_game", { gameId }),
+  updateGame: (gameId: string) => invoke<Game>("update_game", { gameId }),
+  updateChanges: (gameId: string) => invoke<string[]>("update_changes", { gameId }),
 };
 
 export const events = {

@@ -150,6 +150,40 @@ pub struct Inputs<'a> {
 /// Build the plan. Fails (typed) when a component, a user file or a proxy
 /// slot is not available, so the UI can say exactly what to fix.
 pub fn plan(inputs: &Inputs<'_>) -> Result<Plan> {
+    plan_over(inputs, &[])
+}
+
+/// Component ids a route installs, given the game's neural options.
+pub fn components_for(route: Route, neural: NeuralOptions) -> Vec<&'static str> {
+    match route {
+        Route::ReShadeRenoDx => vec!["reshade"],
+        Route::ReShadeFeeder => vec!["reshade", "dlss5-feeder"],
+        Route::OptiScalerDlssNr => vec![fork_for(neural).0],
+        Route::OptiScaler => vec!["optiscaler"],
+        Route::ReShadeVulkan => vec![],
+    }
+}
+
+/// Like [`plan`], but treats `owned` (files the current install wrote) as
+/// absent: "would an install succeed once the current one is removed?"
+/// Used by Update to check the new plan before removing anything.
+pub fn plan_over(inputs: &Inputs<'_>, owned: &[PathBuf]) -> Result<Plan> {
+    OWNED.with(|o| *o.borrow_mut() = owned.to_vec());
+    let result = plan_inner(inputs);
+    OWNED.with(|o| o.borrow_mut().clear());
+    result
+}
+
+thread_local! {
+    static OWNED: std::cell::RefCell<Vec<PathBuf>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// A target counts as occupied unless the current install owns it.
+fn taken(path: &Path) -> bool {
+    path.exists() && !OWNED.with(|o| o.borrow().iter().any(|p| p == path))
+}
+
+fn plan_inner(inputs: &Inputs<'_>) -> Result<Plan> {
     let game = inputs.game;
     let (Some(analysis), route) = (&game.analysis, route_of(&game.status)?) else {
         return Err(Error::NoExecutable {
@@ -261,7 +295,7 @@ fn plan_reshade(
     }
     for name in occupied {
         let path = exe_dir.join(name);
-        if path.exists() {
+        if taken(&path) {
             return Err(Error::ForeignProxyPresent { path });
         }
     }
@@ -344,7 +378,7 @@ fn plan_optiscaler(
         } else {
             exe_dir.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR))
         };
-        if dst.exists() {
+        if taken(&dst) {
             // OptiScaler's own files beside a game mean someone else put them there.
             return Err(Error::ForeignProxyPresent { path: dst });
         }
@@ -574,7 +608,7 @@ fn free_slot(exe_dir: &Path, slots: &[&'static str]) -> Result<&'static str> {
     slots
         .iter()
         .copied()
-        .find(|s| !exe_dir.join(s).exists())
+        .find(|s| !taken(&exe_dir.join(s)))
         .ok_or_else(|| Error::ForeignProxyPresent {
             path: exe_dir.join(slots[0]),
         })
