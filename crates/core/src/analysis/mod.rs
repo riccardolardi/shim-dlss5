@@ -12,7 +12,7 @@ use std::path::Path;
 use std::time::UNIX_EPOCH;
 
 use crate::{
-    model::{Analysis, Bitness, DiscoveredGame},
+    model::{Analysis, Bitness, DiscoveredGame, Engine, GraphicsApi},
     Error, Result,
 };
 
@@ -23,7 +23,8 @@ pub const WALK_DEPTH: usize = 9;
 /// Bump whenever detection rules change, so cached analyses from older
 /// builds are redone on the next scan instead of trusted.
 /// 2: logs and shader packs no longer count as a foreign ReShade/OptiScaler.
-pub const ANALYSIS_VERSION: u32 = 2;
+/// 3: Unity games whose exe is a stub take their API from UnityPlayer.dll.
+pub const ANALYSIS_VERSION: u32 = 3;
 
 /// Analyse a game folder from scratch.
 pub fn analyse(game: &DiscoveredGame) -> Result<Analysis> {
@@ -46,6 +47,11 @@ fn analyse_exe(tree: &walk::Tree, exe: &Path, title: &str) -> Result<Analysis> {
     let exe_dir = exe.parent().unwrap_or(&tree.root);
     let facts = dlss::inspect(tree, exe_dir);
     let (exe_size, exe_mtime) = fingerprint(exe);
+    let engine = exe_resolver::engine(tree, exe);
+    let mut apis = apis::detect(&bytes);
+    if apis.is_empty() && engine == Engine::Unity {
+        apis = unity_apis(exe_dir);
+    }
 
     Ok(Analysis {
         exe: exe.to_path_buf(),
@@ -53,8 +59,8 @@ fn analyse_exe(tree: &walk::Tree, exe: &Path, title: &str) -> Result<Analysis> {
         exe_mtime,
         version: ANALYSIS_VERSION,
         bitness,
-        apis: apis::detect(&bytes),
-        engine: exe_resolver::engine(tree, exe),
+        apis,
+        engine,
         ships_dlss: facts.ships_dlss,
         dlss_version: facts.dlss_version,
         has_dlss5_model: facts.has_model,
@@ -62,6 +68,26 @@ fn analyse_exe(tree: &walk::Tree, exe: &Path, title: &str) -> Result<Analysis> {
         foreign_reshade: facts.foreign_reshade,
         foreign_optiscaler: facts.foreign_optiscaler,
     })
+}
+
+/// A Unity exe is a stub that hands over to UnityPlayer.dll. The player links
+/// every renderer Unity ships, so its imports only say what is possible;
+/// D3D11 is Unity's Windows default and what a game runs unless it opts out.
+fn unity_apis(exe_dir: &Path) -> Vec<GraphicsApi> {
+    let player = exe_dir.join("UnityPlayer.dll");
+    let Ok(info) = pe::read_header(&player) else {
+        return Vec::new();
+    };
+    let found = apis::detect(&pe::read_sections_or_file(
+        &player,
+        &info,
+        &[".rdata", ".idata", ".data"],
+    ));
+    if found.contains(&GraphicsApi::Dx11) {
+        vec![GraphicsApi::Dx11]
+    } else {
+        found
+    }
 }
 
 /// Reuse `previous` when its executable is unchanged, otherwise re-analyse.
@@ -150,6 +176,22 @@ mod tests {
         let a = analyse(&game(tmp.path(), "Old")).unwrap();
         assert_eq!(a.bitness, Bitness::X86);
         assert_eq!(a.apis, vec![GraphicsApi::Dx9]);
+    }
+
+    #[test]
+    fn unity_stub_exe_takes_d3d11_from_the_player() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        write_exe(&root.join("Stub.exe"), X64, &["kernel32.dll"]);
+        write_exe(
+            &root.join("UnityPlayer.dll"),
+            X64,
+            &["d3d12.dll", "d3d11.dll", "vulkan-1.dll", "opengl32.dll"],
+        );
+        make_tree(root, &[("Stub_Data/level0", b"")]);
+        let a = analyse(&game(root, "Stub")).unwrap();
+        assert_eq!(a.engine, Engine::Unity);
+        assert_eq!(a.apis, vec![GraphicsApi::Dx11]);
     }
 
     #[test]
