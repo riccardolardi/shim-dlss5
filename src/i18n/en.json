@@ -198,7 +198,7 @@
 
   "model.yourGpu": "your graphics card",
   "model.fit.fits": "{gpu} runs the DLSS 5 neural pass with this model.",
-  "model.fit.needsCompat": "NVIDIA's signed DLSS 5 model runs the neural pass on RTX 50 cards only. On your {gpu}, DLSS still runs but the neural pass needs the community compatibility build (SHA-256 starting E67DEE20).",
-  "model.fit.unknownBuild": "This model is neither NVIDIA's signed build nor the known compatibility build. It may still work on your {gpu}; shim can't tell in advance.",
+  "model.fit.needsCompat": "NVIDIA's signed DLSS 5 model runs the neural pass on RTX 50 cards only. On your {gpu}, DLSS will still run, but the signed model will not start the neural pass.",
+  "model.fit.unknownBuild": "shim-dlss5 doesn't recognise this model build. It may still work on your {gpu}; shim-dlss5 can't tell in advance.",
   "model.fit.noNvidia": "DLSS 5 needs an NVIDIA RTX graphics card. This PC has {gpu}."
 }

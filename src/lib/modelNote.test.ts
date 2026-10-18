@@ -20,7 +20,8 @@ describe("modelNote", () => {
       expect(note?.tone).toBe("warning");
       expect(note?.text).toContain("RTX 4070");
       expect(note?.text).toContain("RTX 50");
-      expect(note?.text).toContain("E67DEE20");
+      // States the fact about the user's own file; never points at a modified build.
+      expect(note?.text).not.toMatch(/E67DEE20|compatib|community/i);
     }
   });
 
