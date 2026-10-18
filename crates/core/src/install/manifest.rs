@@ -121,6 +121,18 @@ impl InstallManifest {
                 Some(_) => {}
             }
         }
+        // The DLSS-NR fork depends on the placement, which the record does not
+        // keep; that route always pins exactly the fork it installed.
+        if self.route != Route::OptiScalerDlssNr {
+            let needed = crate::install::planner::components_for(self.route, Default::default());
+            for id in needed {
+                if self.components.iter().all(|p| p.id != id) {
+                    if let Some(c) = current.get(id) {
+                        out.push(format!("adds {} {}", c.name, c.version));
+                    }
+                }
+            }
+        }
         if let (Some(installed), Some(now)) = (&self.model_sha256, &user.model) {
             if !installed.eq_ignore_ascii_case(now) {
                 out.push("your DLSS 5 model file changed".into());
@@ -240,6 +252,25 @@ mod tests {
                 "your DLSS 5 model file changed".to_string(),
                 "your renodx-dlss5.addon64 changed".to_string(),
             ]
+        );
+    }
+
+    #[test]
+    fn a_component_the_route_now_needs_is_a_change() {
+        let tmp = tempfile::tempdir().unwrap();
+        let current = ComponentManifest::embedded();
+        let mut m = manifest(tmp.path());
+        m.route = Route::ReShadeFeeder;
+        let feeder = current.get("dlss5-feeder").unwrap();
+        m.components.push(ComponentPin {
+            id: feeder.id.clone(),
+            version: feeder.version.clone(),
+            sha256: feeder.sha256.clone(),
+        });
+        let fxh = current.get("reshade-fxh").unwrap();
+        assert_eq!(
+            m.changes(&current, &UserHashes::default()),
+            vec![format!("adds {} {}", fxh.name, fxh.version)]
         );
     }
 }

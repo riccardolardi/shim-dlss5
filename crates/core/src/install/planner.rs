@@ -4,8 +4,8 @@
 //!
 //! ReShade routes: ReShade (add-on build, as `dxgi.dll`) hosting the user's
 //! RenoDX DLSS 5 add-on next to the user's model; the no-DLSS route adds
-//! DLSS5-Feeder, its effect, a preset that switches it on, and the user's
-//! DLSS runtime. The `ReShade.ini` mirrors a known-working install (§12.0d).
+//! DLSS5-Feeder, its effect and the `ReShade.fxh` it includes, a preset that
+//! switches it on, and the user's DLSS runtime. The `ReShade.ini` mirrors a known-working install (§12.0d).
 //!
 //! OptiScaler routes: the whole payload beside the exe, `OptiScaler.dll`
 //! renamed to the first free proxy slot; the DLSS-NR fork also gets the model
@@ -27,6 +27,8 @@ pub const RESHADE_INI: &str = "ReShade.ini";
 pub const RESHADE_PRESET: &str = "ReShadePreset.ini";
 pub const RENODX_ADDON: &str = "renodx-dlss5.addon64";
 pub const DLSS_RUNTIME_DLL: &str = "nvngx_dlss.dll";
+/// Where ReShade looks for the header, per the `EffectSearchPaths` we write.
+pub const RESHADE_FXH: &str = "reshade-shaders/Shaders/ReShade.fxh";
 
 /// Proxy names OptiScaler can take, in the order we try them (PLAN §5.5).
 pub const OPTISCALER_SLOTS_DX: &[&str] = &[
@@ -157,7 +159,7 @@ pub fn plan(inputs: &Inputs<'_>) -> Result<Plan> {
 pub fn components_for(route: Route, neural: NeuralOptions) -> Vec<&'static str> {
     match route {
         Route::ReShadeRenoDx => vec!["reshade"],
-        Route::ReShadeFeeder => vec!["reshade", "dlss5-feeder"],
+        Route::ReShadeFeeder => vec!["reshade", "reshade-fxh", "dlss5-feeder"],
         Route::OptiScalerDlssNr => vec![fork_for(neural).0],
         Route::OptiScaler => vec!["optiscaler"],
         Route::ReShadeVulkan => vec![],
@@ -317,6 +319,7 @@ fn plan_reshade(
 
     if with_feeder {
         let feeder = component(inputs, "dlss5-feeder")?;
+        let fxh = component(inputs, "reshade-fxh")?;
         let runtime = user_file(
             inputs.settings.dlss_runtime_path.as_deref(),
             "DLSS runtime (nvngx_dlss.dll)",
@@ -336,6 +339,26 @@ fn plan_reshade(
                 note: format!("DLSS5-Feeder {}: {rel}", feeder.version),
             });
         }
+        // DLSS5_Feed.fx does not compile without it. A copy the game already
+        // has (from a ReShade the user set up) is the same header; keep it.
+        let fxh_dst = exe_dir.join(RESHADE_FXH.replace('/', std::path::MAIN_SEPARATOR_STR));
+        if !taken(&fxh_dst) {
+            let rel = inputs
+                .store
+                .files(fxh)?
+                .into_iter()
+                .find(|r| r.ends_with("/ReShade.fxh"))
+                .ok_or_else(|| Error::ComponentMissing {
+                    id: fxh.id.clone(),
+                    detail: "ReShade.fxh not in the download".into(),
+                })?;
+            plan.ops.push(FileOp::Copy {
+                src: inputs.store.file(fxh, &rel)?,
+                dst: fxh_dst,
+                note: format!("ReShade.fxh ({}), included by DLSS5_Feed.fx", fxh.version),
+            });
+        }
+        plan.components.push(pin(fxh));
         plan.user_files.push((
             DLSS_RUNTIME_DLL.into(),
             crate::components::fetch::sha256_file(&runtime)?,
@@ -639,6 +662,11 @@ pub mod testing {
                 ("READ-ME-FIRST.txt", b"readme"),
             ],
         );
+        let fxh = fake_component(
+            &store,
+            "reshade-fxh",
+            &[("reshade-shaders-abc/Shaders/ReShade.fxh", b"fxh")],
+        );
         let fork = fake_component(
             &store,
             "optiscaler-nr",
@@ -676,7 +704,7 @@ pub mod testing {
         let manifest = ComponentManifest {
             schema: 1,
             updated: "test".into(),
-            components: vec![reshade, feeder, fork, post, upstream],
+            components: vec![reshade, fxh, feeder, fork, post, upstream],
         };
         (store, manifest)
     }
@@ -847,13 +875,21 @@ mod tests {
                 "ReShadePreset.ini",
                 "dlss5-feed.addon64",
                 "reshade-shaders/Shaders/DLSS5_Feed.fx",
+                RESHADE_FXH,
                 DLSS_RUNTIME_DLL,
                 RENODX_ADDON,
                 MODEL_DLL,
             ]
         );
-        assert_eq!(plan.components.len(), 2);
+        assert_eq!(plan.components.len(), 3);
         assert_eq!(plan.user_files.len(), 2);
+
+        // A header the game already has stays; it is the same file.
+        let shaders = f.game_dir.join("reshade-shaders/Shaders");
+        std::fs::create_dir_all(&shaders).unwrap();
+        std::fs::write(shaders.join("ReShade.fxh"), b"theirs").unwrap();
+        assert!(!names(&super::plan(&inputs).unwrap()).contains(&RESHADE_FXH.to_string()));
+        std::fs::remove_file(shaders.join("ReShade.fxh")).unwrap();
 
         std::fs::write(f.game_dir.join("ReShade.ini"), b"x").unwrap();
         assert_eq!(

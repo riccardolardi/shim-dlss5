@@ -140,6 +140,7 @@ mod tests {
             ids,
             vec![
                 "reshade",
+                "reshade-fxh",
                 "dlss5-feeder",
                 "optiscaler-nr",
                 "optiscaler-dlssnr",

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-10-17",
+  "updated": "2026-10-18",
   "components": [
     {
       "id": "reshade",
@@ -14,6 +14,22 @@
       "archive": "zip",
       "extract": { "strip": [], "only": ["ReShade64.dll", "ReShade64.json"] },
       "summary": "Post-processing host that loads the DLSS 5 add-on. Only the 64-bit DLL is taken out of the setup file; the installer itself is never run."
+    },
+    {
+      "id": "reshade-fxh",
+      "name": "ReShade.fxh (ReShade's standard shader header)",
+      "license": "CC0-1.0",
+      "publisher": "https://github.com/crosire/reshade-shaders",
+      "version": "fd00221",
+      "asset": "https://github.com/crosire/reshade-shaders/archive/fd0022170615ce0d8162d219bff07232fa6dd84f.zip",
+      "sha256": "a3b110ba5118f3b944d74f0b0746c21280071d389ed98d615bf3c4b3a1778586",
+      "size": 58091,
+      "archive": "zip",
+      "extract": {
+        "strip": [],
+        "only": ["reshade-shaders-fd0022170615ce0d8162d219bff07232fa6dd84f/Shaders/ReShade.fxh"]
+      },
+      "summary": "The header DLSS5_Feed.fx includes. ReShade's own setup downloads it; shim takes only this one file from the pinned commit."
     },
     {
       "id": "dlss5-feeder",
