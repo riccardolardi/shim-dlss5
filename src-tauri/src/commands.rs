@@ -393,6 +393,7 @@ pub async fn model_sources(app: AppHandle) -> CmdResult<Vec<shim_core::model_sou
         Ok(shim_core::model_source::find(
             &library,
             &state.paths,
+            state.platform.registry.as_ref(),
             state.platform.signatures.as_ref(),
         ))
     })

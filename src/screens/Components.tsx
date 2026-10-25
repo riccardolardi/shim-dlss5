@@ -234,6 +234,7 @@ function ModelSources({ current }: { current: string | null }) {
             <div className="min-w-0 text-xs">
               <div className="truncate text-text-2">{s.title}</div>
               <div className="truncate text-text-3" title={s.path}>
+                {s.version && `${s.version} · `}
                 {formatSize(s.size)} · <span className="font-mono">{s.sha256.slice(0, 16)}…</span> ·{" "}
                 <span className="text-success">{t("components.signature.valid", { signer: "NVIDIA Corporation" })}</span>
               </div>

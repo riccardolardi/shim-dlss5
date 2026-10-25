@@ -12,7 +12,7 @@ use std::path::Path;
 use crate::model::Bitness;
 
 const MACHINE_I386: u16 = 0x14C;
-const MACHINE_AMD64: u16 = 0x8664;
+pub const MACHINE_AMD64: u16 = 0x8664;
 const MACHINE_ARM64: u16 = 0xAA64;
 /// Enough for the DOS stub, PE header and a section table of 96 entries.
 const HEADER_READ: usize = 8192;
