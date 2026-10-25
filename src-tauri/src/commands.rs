@@ -168,11 +168,13 @@ pub async fn model_status(app: AppHandle) -> CmdResult<ModelStatus> {
         let gpu = shim_core::report::detect_gpu(state.platform.registry.as_ref());
         let family = gpu.as_ref().map(|g| model_fit::gpu_family(&g.name));
         let model = state.settings.lock().map_err(poisoned)?.model_path.clone();
-        let sha = match model.filter(|p| p.is_file()) {
-            Some(path) => Some(cached_sha256(&state, &path)?),
+        let facts = match model.filter(|p| p.is_file()) {
+            Some(path) => Some(cached_model_facts(&state, &path)?),
             None => None,
         };
-        let build = sha.as_deref().map(model_fit::model_build);
+        let build = facts
+            .as_ref()
+            .map(|(sha, sig)| model_fit::model_build(sha, sig));
         Ok(ModelStatus {
             fit: model_fit::model_fit(family, build),
             gpu,
@@ -360,8 +362,64 @@ fn cached_sha256(state: &AppState, path: &std::path::Path) -> CmdResult<String> 
         size,
         modified,
         sha256: sha256.clone(),
+        signature: None,
     });
     Ok(sha256)
+}
+
+/// The model's hash and Authenticode status, each computed once per change.
+fn cached_model_facts(
+    state: &AppState,
+    path: &std::path::Path,
+) -> CmdResult<(String, shim_core::platform::Signature)> {
+    let sha256 = cached_sha256(state, path)?;
+    let mut cache = state.model_hash.lock().map_err(poisoned)?;
+    if let Some(sig) = cache.as_ref().and_then(|c| c.signature.clone()) {
+        return Ok((sha256, sig));
+    }
+    let sig = state.platform.signatures.check(path);
+    if let Some(c) = cache.as_mut() {
+        c.signature = Some(sig.clone());
+    }
+    Ok((sha256, sig))
+}
+
+/// NVIDIA-signed models in the scanned games, which the user can adopt.
+#[tauri::command]
+pub async fn model_sources(app: AppHandle) -> CmdResult<Vec<shim_core::model_source::ModelSource>> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let library = state.library.lock().map_err(poisoned)?.clone();
+        Ok(shim_core::model_source::find(
+            &library,
+            &state.paths,
+            state.platform.signatures.as_ref(),
+        ))
+    })
+    .await
+}
+
+/// Copy a signed model found in a game into our data folder and choose it.
+#[tauri::command]
+pub async fn use_model_source(app: AppHandle, path: String) -> CmdResult<Settings> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let copy = shim_core::model_source::adopt(
+            Path::new(&path),
+            &state.paths,
+            state.platform.signatures.as_ref(),
+        )?;
+        let mut current = state.settings.lock().map_err(poisoned)?;
+        let settings = Settings {
+            model_path: Some(copy),
+            ..current.clone()
+        }
+        .validated();
+        settings.save(&state.paths)?;
+        *current = settings.clone();
+        Ok(settings)
+    })
+    .await
 }
 
 /// Plan and run the install for one game. `confirm_anti_cheat` must be true

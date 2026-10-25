@@ -39,6 +39,8 @@ pub struct HashCache {
     pub size: u64,
     pub modified: Option<SystemTime>,
     pub sha256: String,
+    /// Checked on first need; reading the signature hashes the file again.
+    pub signature: Option<shim_core::platform::Signature>,
 }
 
 impl AppState {

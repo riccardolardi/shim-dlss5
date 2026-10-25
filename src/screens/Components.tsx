@@ -8,6 +8,7 @@ import { useApp } from "@/store/app";
 import { commands, toErrorDto } from "@/lib/commands";
 import type { ComponentRow } from "@/lib/generated/ComponentRow";
 import type { FileInfo } from "@/lib/generated/FileInfo";
+import type { ModelSource } from "@/lib/generated/ModelSource";
 import { ModelNote } from "@/components/ModelNote";
 import type { ErrorDto } from "@/lib/generated/ErrorDto";
 import type { Settings } from "@/lib/generated/Settings";
@@ -181,6 +182,7 @@ function UserFileRow({ spec, settings }: { spec: (typeof userFiles)[number]; set
         ) : (
           <div className="mt-1 text-xs text-text-3">{t("components.model.none")}</div>
         )}
+        {spec.key === "model_path" && <ModelSources current={info?.sha256 ?? null} />}
       </div>
       <div className="flex shrink-0 gap-2">
         <Button onClick={() => void choose()}>{t("components.choose")}</Button>
@@ -190,6 +192,64 @@ function UserFileRow({ spec, settings }: { spec: (typeof userFiles)[number]; set
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+/** NVIDIA-signed models in the user's games, each one click from being used. */
+function ModelSources({ current }: { current: string | null }) {
+  const adoptModel = useApp((s) => s.adoptModel);
+  const scannedAt = useApp((s) => s.library.scanned_at);
+  const [sources, setSources] = useState<ModelSource[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorDto | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    setSources(null);
+    commands
+      .modelSources()
+      .then((s) => live && setSources(s))
+      .catch((e) => live && (setSources([]), setError(toErrorDto(e))));
+    return () => {
+      live = false;
+    };
+  }, [scannedAt]);
+
+  const adopt = async (path: string) => {
+    setBusy(path);
+    setError(await adoptModel(path));
+    setBusy(null);
+  };
+
+  return (
+    <div className="mt-3 rounded-md border border-border px-3 py-2">
+      <div className="text-xs font-medium text-text-2">{t("components.sources.title")}</div>
+      {sources === null && <div className="mt-1 text-xs text-text-3">{t("components.sources.searching")}</div>}
+      {sources?.length === 0 && <div className="mt-1 text-xs text-text-3">{t("components.sources.none")}</div>}
+      {sources?.map((s) => {
+        const inUse = current !== null && current === s.sha256;
+        return (
+          <div key={s.sha256} className="mt-2 flex items-center justify-between gap-3">
+            <div className="min-w-0 text-xs">
+              <div className="truncate text-text-2">{s.title}</div>
+              <div className="truncate text-text-3" title={s.path}>
+                {formatSize(s.size)} · <span className="font-mono">{s.sha256.slice(0, 16)}…</span> ·{" "}
+                <span className="text-success">{t("components.signature.valid", { signer: "NVIDIA Corporation" })}</span>
+              </div>
+            </div>
+            <Button disabled={inUse || busy !== null} onClick={() => void adopt(s.path)}>
+              {inUse ? t("components.sources.inUse") : t("components.sources.use")}
+            </Button>
+          </div>
+        );
+      })}
+      {sources && sources.length > 0 && <div className="mt-2 text-xs text-text-3">{t("components.sources.hint")}</div>}
+      {error && (
+        <div className="mt-2">
+          <ErrorNote error={error} />
+        </div>
+      )}
     </div>
   );
 }

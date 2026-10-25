@@ -48,6 +48,8 @@ pub fn run() {
             commands::remove_game,
             commands::update_game,
             commands::update_changes,
+            commands::model_sources,
+            commands::use_model_source,
             commands::set_game_mode,
             commands::set_neural_options,
             commands::last_run,

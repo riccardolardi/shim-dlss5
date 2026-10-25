@@ -62,6 +62,12 @@ impl AppPaths {
         self.root.join("cache").join("covers")
     }
 
+    /// Copies of the user's own files (the DLSS 5 model), kept stable even
+    /// when the game they came from updates or is uninstalled.
+    pub fn user_files_dir(&self) -> PathBuf {
+        self.root.join("user-files")
+    }
+
     pub fn logs_dir(&self) -> PathBuf {
         self.root.join("logs")
     }

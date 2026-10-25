@@ -70,6 +70,8 @@ interface AppState {
   dismissUpdate: () => void;
   relaunchElevated: () => Promise<ErrorDto | null>;
   updateSettings: (patch: Partial<Settings>) => Promise<ErrorDto | null>;
+  /** Copy an NVIDIA-signed model found in a game and make it the chosen one. */
+  adoptModel: (path: string) => Promise<ErrorDto | null>;
   loadModelStatus: () => Promise<void>;
   loadComponents: () => Promise<void>;
   fetchComponent: (id: string) => Promise<void>;
@@ -228,6 +230,16 @@ export const useApp = create<AppState>((set, get) => ({
       return null;
     } catch (e) {
       if (get().settings === next) set({ settings: current });
+      return toErrorDto(e);
+    }
+  },
+
+  adoptModel: async (path) => {
+    try {
+      set({ settings: await commands.useModelSource(path) });
+      void get().loadModelStatus();
+      return null;
+    } catch (e) {
       return toErrorDto(e);
     }
   },

@@ -5,10 +5,17 @@
 //! (`feature 18 create failed with 0xbad00001`). Those cards need ShortFuse's
 //! modified compatibility build. Both builds are identified by the SHA-256s
 //! that wilsjo2's OptiScaler DLSS-NR fork documents in `INSTALL-DLSSNR.md`.
+//! NVIDIA ships new signed builds (the faster October 2026 model), so any
+//! file with an intact NVIDIA signature also counts as NVIDIA's model.
 //! Other files are not judged: a custom runtime may still work.
 
 use serde::Serialize;
 use ts_rs::TS;
+
+use crate::platform::Signature;
+
+/// Leaf certificate name on NVIDIA's own binaries.
+pub const NVIDIA_SIGNER: &str = "NVIDIA Corporation";
 
 /// NVIDIA's signed 310.8 model. Runs the neural pass on RTX 50.
 pub const NVIDIA_SIGNED_SHA256: &str =
@@ -81,9 +88,14 @@ pub fn gpu_family(name: &str) -> GpuFamily {
     }
 }
 
-pub fn model_build(sha256: &str) -> ModelBuild {
+/// An intact Authenticode signature by NVIDIA: the file is as NVIDIA built it.
+pub fn nvidia_signed(signature: &Signature) -> bool {
+    matches!(signature, Signature::Valid { signer } if signer.eq_ignore_ascii_case(NVIDIA_SIGNER))
+}
+
+pub fn model_build(sha256: &str, signature: &Signature) -> ModelBuild {
     let h = sha256.to_lowercase();
-    if h == NVIDIA_SIGNED_SHA256 {
+    if h == NVIDIA_SIGNED_SHA256 || nvidia_signed(signature) {
         ModelBuild::NvidiaSigned
     } else if h == COMPAT_SHA256 {
         ModelBuild::Compat
@@ -135,12 +147,35 @@ mod tests {
 
     #[test]
     fn known_hashes_are_recognised_in_any_case() {
+        let none = Signature::Unsigned;
         assert_eq!(
-            model_build(&NVIDIA_SIGNED_SHA256.to_uppercase()),
+            model_build(&NVIDIA_SIGNED_SHA256.to_uppercase(), &none),
             ModelBuild::NvidiaSigned
         );
-        assert_eq!(model_build(COMPAT_SHA256), ModelBuild::Compat);
-        assert_eq!(model_build(&"0".repeat(64)), ModelBuild::Unknown);
+        assert_eq!(model_build(COMPAT_SHA256, &none), ModelBuild::Compat);
+        assert_eq!(model_build(&"0".repeat(64), &none), ModelBuild::Unknown);
+    }
+
+    #[test]
+    fn a_new_build_counts_as_nvidias_only_with_an_intact_nvidia_signature() {
+        let new = "1".repeat(64);
+        let signed = |signer: &str| Signature::Valid {
+            signer: signer.into(),
+        };
+        assert_eq!(
+            model_build(&new, &signed("NVIDIA Corporation")),
+            ModelBuild::NvidiaSigned
+        );
+        for other in [
+            signed("Someone Else"),
+            Signature::HashMismatch {
+                signer: "NVIDIA Corporation".into(),
+            },
+            Signature::Unsigned,
+            Signature::Unknown("no Windows".into()),
+        ] {
+            assert_eq!(model_build(&new, &other), ModelBuild::Unknown, "{other:?}");
+        }
     }
 
     #[test]
