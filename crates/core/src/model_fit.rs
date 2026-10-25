@@ -40,7 +40,12 @@ pub enum GpuFamily {
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum ModelBuild {
+    /// NVIDIA's 310.8, the build the DLSS 5 add-ons were made for.
     NvidiaSigned,
+    /// A later NVIDIA-signed build (310.9.16, October 2026). The OptiScaler
+    /// DLSS-NR fork runs it; RenoDX add-on v4.7 crashed Bright Memory when
+    /// it created the neural feature with it.
+    NvidiaNewer,
     Compat,
     Unknown,
 }
@@ -95,8 +100,10 @@ pub fn nvidia_signed(signature: &Signature) -> bool {
 
 pub fn model_build(sha256: &str, signature: &Signature) -> ModelBuild {
     let h = sha256.to_lowercase();
-    if h == NVIDIA_SIGNED_SHA256 || nvidia_signed(signature) {
+    if h == NVIDIA_SIGNED_SHA256 {
         ModelBuild::NvidiaSigned
+    } else if nvidia_signed(signature) {
+        ModelBuild::NvidiaNewer
     } else if h == COMPAT_SHA256 {
         ModelBuild::Compat
     } else {
@@ -114,7 +121,7 @@ pub fn model_fit(gpu: Option<GpuFamily>, model: Option<ModelBuild>) -> Option<Mo
         (_, Some(M::Unknown)) => Some(ModelFit::UnknownBuild),
         (G::Rtx50, Some(_)) => Some(ModelFit::Fits),
         (G::Rtx40 | G::Rtx30 | G::Rtx20, Some(M::Compat)) => Some(ModelFit::Fits),
-        (G::Rtx40 | G::Rtx30 | G::Rtx20, Some(M::NvidiaSigned) | None) => {
+        (G::Rtx40 | G::Rtx30 | G::Rtx20, Some(M::NvidiaSigned | M::NvidiaNewer) | None) => {
             Some(ModelFit::NeedsCompatBuild)
         }
         (G::Rtx50 | G::OtherNvidia, None) => None,
@@ -164,7 +171,20 @@ mod tests {
         };
         assert_eq!(
             model_build(&new, &signed("NVIDIA Corporation")),
-            ModelBuild::NvidiaSigned
+            ModelBuild::NvidiaNewer
+        );
+        assert_eq!(
+            model_build(NVIDIA_SIGNED_SHA256, &signed("NVIDIA Corporation")),
+            ModelBuild::NvidiaSigned,
+            "310.8 stays the known build"
+        );
+        assert_eq!(
+            model_fit(Some(GpuFamily::Rtx50), Some(ModelBuild::NvidiaNewer)),
+            Some(ModelFit::Fits)
+        );
+        assert_eq!(
+            model_fit(Some(GpuFamily::Rtx40), Some(ModelBuild::NvidiaNewer)),
+            Some(ModelFit::NeedsCompatBuild)
         );
         for other in [
             signed("Someone Else"),

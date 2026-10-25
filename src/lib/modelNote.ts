@@ -20,6 +20,22 @@ export function routeUsesModel(route: Route): boolean {
   return route !== "optiscaler" && route !== "reshade_vulkan";
 }
 
+/** Routes where the RenoDX add-on runs the model (ReShade hosts it). */
+export function routeUsesRenoDx(route: Route): boolean {
+  return route === "reshade_renodx" || route === "reshade_feeder";
+}
+
+/**
+ * A newer NVIDIA build than the add-ons were made for (310.9.16 vs 310.8).
+ * The OptiScaler fork runs it; RenoDX add-on v4.7 crashed with it. On a game
+ * page it is only worth saying where the route runs RenoDX.
+ */
+export function newerBuildNote(status: ModelStatus | null, place: NotePlace, route?: Route): ModelNote | null {
+  if (status?.build !== "nvidia_newer") return null;
+  if (place === "components") return { text: t("model.newer.components"), tone: "warning" };
+  return route && routeUsesRenoDx(route) ? { text: t("model.newer.game"), tone: "warning" } : null;
+}
+
 export function modelNote(status: ModelStatus | null, place: NotePlace): ModelNote | null {
   if (!status?.fit) return null;
   const gpu = status.gpu?.name ?? t("model.yourGpu");

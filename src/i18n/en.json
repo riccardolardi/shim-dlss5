@@ -209,5 +209,8 @@
   "model.fit.fits": "{gpu} runs the DLSS 5 neural pass with this model.",
   "model.fit.needsCompat": "NVIDIA's signed DLSS 5 model runs the neural pass on RTX 50 cards only. On your {gpu}, DLSS will still run, but the signed model will not start the neural pass.",
   "model.fit.unknownBuild": "shim-dlss5 doesn't recognise this model build. It may still work on your {gpu}; shim-dlss5 can't tell in advance.",
+  "model.newer.components": "This is a newer NVIDIA build than the RenoDX DLSS 5 add-on was made for (310.8). It runs with \"OptiScaler + DLSS 5\" (under Advanced on a game's page). With \"DLSS 5 only\" and on games without DLSS, RenoDX add-on v4.7 crashed when the neural pass started. Keep your 310.8 model for those, or get a newer add-on.",
+  "model.newer.game": "Your DLSS 5 model is a newer NVIDIA build than the RenoDX add-on was made for, and in testing the add-on crashed with it when the neural pass started. Switch this game to \"OptiScaler + DLSS 5\" under Advanced if it is offered, or choose your 310.8 model in Components.",
+  "components.sources.newer": "Newer than the RenoDX add-on was made for: use it with OptiScaler + DLSS 5.",
   "model.fit.noNvidia": "DLSS 5 needs an NVIDIA RTX graphics card. This PC has {gpu}."
 }

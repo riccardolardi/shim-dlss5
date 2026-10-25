@@ -1,5 +1,6 @@
 import { useApp } from "@/store/app";
-import { modelNote, type NotePlace } from "@/lib/modelNote";
+import { modelNote, newerBuildNote, type NotePlace } from "@/lib/modelNote";
+import type { Route } from "@/lib/generated/Route";
 import type { Tone } from "@/lib/status";
 
 const toneClass: Record<Tone, string> = {
@@ -9,14 +10,18 @@ const toneClass: Record<Tone, string> = {
   danger: "border-danger/40 text-danger",
 };
 
-/** One line about whether the user's DLSS 5 model suits their GPU. */
-export function ModelNote({ place, className = "" }: { place: NotePlace; className?: string }) {
+/** What to know about the user's DLSS 5 model: GPU fit, and a newer build's limits on `route`. */
+export function ModelNote({ place, route, className = "" }: { place: NotePlace; route?: Route; className?: string }) {
   const status = useApp((s) => s.modelStatus);
-  const note = modelNote(status, place);
-  if (!note) return null;
+  const notes = [modelNote(status, place), newerBuildNote(status, place, route)].filter((n) => n !== null);
+  if (notes.length === 0) return null;
   return (
-    <p className={`rounded-md border px-3 py-2 text-xs ${toneClass[note.tone]} ${className}`} role="note">
-      {note.text}
-    </p>
+    <div className={`flex flex-col gap-2 ${className}`}>
+      {notes.map((note) => (
+        <p key={note.text} className={`rounded-md border px-3 py-2 text-xs ${toneClass[note.tone]}`} role="note">
+          {note.text}
+        </p>
+      ))}
+    </div>
   );
 }

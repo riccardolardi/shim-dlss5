@@ -211,7 +211,7 @@ function RouteSection({ game }: { game: GameModel }) {
         </div>
 
         {(s.kind === "ready" || s.kind === "installed" || s.kind === "update_available") &&
-          routeUsesModel(s.route) && <ModelNote place="game" />}
+          routeUsesModel(s.route) && <ModelNote place="game" route={s.route} />}
 
         {s.kind === "update_available" && !busyHere && <UpdateChanges gameId={game.id} status={s.kind} />}
 

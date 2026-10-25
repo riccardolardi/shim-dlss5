@@ -238,6 +238,7 @@ function ModelSources({ current }: { current: string | null }) {
                 {formatSize(s.size)} · <span className="font-mono">{s.sha256.slice(0, 16)}…</span> ·{" "}
                 <span className="text-success">{t("components.signature.valid", { signer: "NVIDIA Corporation" })}</span>
               </div>
+              {s.build === "nvidia_newer" && <div className="text-warning">{t("components.sources.newer")}</div>}
             </div>
             <Button disabled={inUse || busy !== null} onClick={() => void adopt(s.path)}>
               {inUse ? t("components.sources.inUse") : t("components.sources.use")}

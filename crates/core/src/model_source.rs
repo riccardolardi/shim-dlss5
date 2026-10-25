@@ -285,7 +285,7 @@ mod tests {
         let found = find(&library, &paths, &FakeRegistry::default(), &FakeSig);
         assert_eq!(found.len(), 1, "{found:?}");
         assert_eq!(found[0].title, "Ball");
-        assert_eq!(found[0].build, ModelBuild::NvidiaSigned);
+        assert_eq!(found[0].build, ModelBuild::NvidiaNewer);
     }
 
     #[test]

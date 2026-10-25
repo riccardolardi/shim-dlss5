@@ -1,4 +1,4 @@
-import { modelNote, routeUsesModel } from "./modelNote";
+import { modelNote, newerBuildNote, routeUsesModel } from "./modelNote";
 import type { ModelStatus } from "@/lib/generated/ModelStatus";
 
 const status = (fit: ModelStatus["fit"], name = "NVIDIA GeForce RTX 4070"): ModelStatus => ({
@@ -49,5 +49,21 @@ describe("routeUsesModel", () => {
     expect(routeUsesModel("optiscaler_dlssnr")).toBe(true);
     expect(routeUsesModel("reshade_renodx")).toBe(true);
     expect(routeUsesModel("reshade_feeder")).toBe(true);
+  });
+});
+
+describe("newerBuildNote", () => {
+  const newer: ModelStatus = { ...status("fits", "NVIDIA GeForce RTX 5070"), build: "nvidia_newer" };
+
+  it("explains a newer NVIDIA build on Components and on RenoDX game pages only", () => {
+    expect(newerBuildNote(newer, "components")?.tone).toBe("warning");
+    expect(newerBuildNote(newer, "game", "reshade_renodx")?.text).toMatch(/OptiScaler \+ DLSS 5/);
+    expect(newerBuildNote(newer, "game", "reshade_feeder")).not.toBeNull();
+    expect(newerBuildNote(newer, "game", "optiscaler_dlssnr")).toBeNull();
+  });
+
+  it("says nothing for the 310.8 build", () => {
+    expect(newerBuildNote(status("fits"), "components")).toBeNull();
+    expect(newerBuildNote(status("fits"), "game", "reshade_renodx")).toBeNull();
   });
 });
